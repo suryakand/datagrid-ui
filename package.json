@@ -1,0 +1,56 @@
+{
+  "name": "@helix-x/datagrid-ui",
+  "version": "0.1.0",
+  "description": "Dependency-free React data grid: virtualized rows, server-side paging/sorting/filtering, inline editing, Tailwind-styled",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist",
+    "prepack": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "react",
+    "datagrid",
+    "data-grid",
+    "table",
+    "virtualized",
+    "server-side",
+    "tailwind"
+  ],
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "tsup": "^8.5.0",
+    "typescript": "~5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  }
+}
