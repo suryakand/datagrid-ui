@@ -7,6 +7,20 @@ and persisted column preferences.
 Its only runtime requirement is React. Styling is plain Tailwind utility
 classes, so there is no CSS file to import and no theme engine to configure.
 
+## Example
+
+A runnable Vite app with a mock stock-market API lives in [`example/`](./example):
+
+```bash
+cd example
+npm install
+npm run dev
+```
+
+480 symbols paged, sorted and filtered server-side, with live prices, inline
+editing and server-side field validation. `example/src/columns.tsx` is the file
+worth reading first.
+
 ## Install
 
 The package is a standalone module — it can be installed from a registry, a
