@@ -1,6 +1,6 @@
 {
   "name": "@helix-x/datagrid-ui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dependency-free React data grid: virtualized rows, server-side paging/sorting/filtering, inline editing, Tailwind-styled",
   "type": "module",
   "sideEffects": false,
