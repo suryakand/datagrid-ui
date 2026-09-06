@@ -8,3 +8,6 @@ npm-debug.log*
 # Local smoke-test scaffolding
 .ssr-out/
 .ssr-smoke.tsx
+
+# Generated API documentation
+docs/

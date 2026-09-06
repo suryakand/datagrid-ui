@@ -13,11 +13,20 @@ import {
   isUnaryFilter,
 } from '../core/filterModel';
 
+/** Props for {@link FilterPopover}. */
 export interface FilterPopoverProps {
+  /** Which filter UI to render. */
   kind: FilterKind;
+  /** The column's current filter, or `undefined` when unfiltered. */
   value: HxFilterModel | undefined;
+  /**
+   * Options for a `set` filter: a static list, or a loader called the first
+   * time the popover opens.
+   */
   setValues?: string[] | (() => Promise<string[]>);
+  /** Called with the new filter, or `null` to clear the column's filter. */
   onApply: (filter: HxFilterModel | null) => void;
+  /** Dismiss the popover. */
   onClose: () => void;
 }
 
@@ -140,6 +149,12 @@ function SetFilterBody({
 }
 
 /** Header filter menu. Emits the wire-format model directly. */
+/**
+ * The per-column filter editor, covering all four
+ * {@link FilterKind | filter kinds}.
+ *
+ * {@link DataGrid} opens this from the header; exported for custom surfaces.
+ */
 export function FilterPopover({
   kind,
   value,

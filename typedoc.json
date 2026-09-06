@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "@helix-x/datagrid-ui",
+  "includeVersion": true,
+  "readme": "README.md",
+  "hideGenerator": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/suryakand/datagrid-ui",
+    "npm": "https://www.npmjs.com/package/@helix-x/datagrid-ui"
+  },
+  "categorizeByGroup": true,
+  "sort": ["static-first", "alphabetical"],
+  "searchInComments": true,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "treatWarningsAsErrors": false,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": true
+  }
+}

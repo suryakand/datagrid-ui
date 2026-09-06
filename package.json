@@ -24,7 +24,9 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist",
+    "docs": "typedoc",
+    "docs:watch": "typedoc --watch",
+    "clean": "rm -rf dist docs",
     "prepack": "npm run clean && npm run build"
   },
   "keywords": [
@@ -40,7 +42,7 @@
     "type": "git",
     "url": "git+https://github.com/suryakand/datagrid-ui.git"
   },
-  "homepage": "https://github.com/suryakand/datagrid-ui#readme",
+  "homepage": "https://suryakand.github.io/datagrid-ui/",
   "bugs": {
     "url": "https://github.com/suryakand/datagrid-ui/issues"
   },
@@ -52,6 +54,7 @@
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
     "tsup": "^8.5.0",
+    "typedoc": "^0.28.20",
     "typescript": "~5.7.2"
   },
   "engines": {

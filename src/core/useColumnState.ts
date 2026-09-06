@@ -9,24 +9,44 @@ import type {
 } from '../types';
 import { columnId, resolveColumn } from './values';
 
+/** The user's column layout, as persisted. */
 export interface ColumnStateValue {
+  /** Column ids in display order. */
   order: string[];
+  /** Ids of hidden columns. */
   hidden: string[];
+  /** Widths in pixels, by column id. */
   widths: Record<string, number>;
+  /** Pinned edge, by column id. */
   pinned: Record<string, Pinned>;
 }
 
+/**
+ * What {@link useColumnState} returns.
+ *
+ * @typeParam T - The row type.
+ * @typeParam C - The context type.
+ */
 export interface UseColumnStateResult<T, C> {
   /** Every column, in user order, including hidden ones (for the columns panel). */
   allColumns: ResolvedColumn<T, C>[];
+  /** Just the visible columns, in display order. */
   visibleColumns: ResolvedColumn<T, C>[];
+  /** Measured geometry for the visible columns. */
   layout: ColumnLayout<T, C>;
+  /** The raw layout state, ready to persist. */
   state: ColumnStateValue;
+  /** Whether a column is hidden. */
   isHidden: (colId: string) => boolean;
+  /** Show or hide one column. */
   setHidden: (colId: string, hidden: boolean) => void;
+  /** Resize one column. Clamped to its `minWidth` and `maxWidth`. */
   setWidth: (colId: string, width: number) => void;
+  /** Pin one column to an edge, or pass `undefined` to unpin it. */
   setPinned: (colId: string, pinned: Pinned | undefined) => void;
+  /** Move a column to a new index in the display order. */
   moveColumn: (colId: string, toIndex: number) => void;
+  /** Discard the user's layout and return to the column definitions' defaults. */
   reset: () => void;
 }
 
@@ -78,6 +98,18 @@ function mergePersisted(
   };
 }
 
+/**
+ * Column order, visibility, width and pinning, merged over the definitions'
+ * defaults.
+ *
+ * Persisted state is merged key by key rather than replacing the defaults
+ * wholesale — so a layout saved before a new column was added does not hide
+ * that column, and does not discard defaults it says nothing about.
+ *
+ * @typeParam T - The row type.
+ * @typeParam C - The context type.
+ * @returns The resolved columns, their layout, and the mutators.
+ */
 export function useColumnState<T, C>(
   columns: ColumnDef<T, C>[],
   persisted: PersistedGridState['columns'] | undefined,

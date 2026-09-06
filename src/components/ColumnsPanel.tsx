@@ -2,17 +2,35 @@ import { useMemo, useState } from 'react';
 import type { Pinned, ResolvedColumn } from '../types';
 import { headerText } from '../core/values';
 
+/**
+ * Props for {@link ColumnsPanel}.
+ *
+ * @typeParam T - The row type.
+ * @typeParam C - The context type.
+ */
 export interface ColumnsPanelProps<T, C> {
+  /** Every column, including hidden ones. */
   columns: ResolvedColumn<T, C>[];
+  /** Whether a column is currently hidden. */
   isHidden: (colId: string) => boolean;
+  /** Show or hide one column. */
   onToggle: (colId: string, hidden: boolean) => void;
+  /** Move a column to a new index. */
   onMove: (colId: string, toIndex: number) => void;
+  /** Pin a column, or `undefined` to unpin. */
   onPin: (colId: string, pinned: Pinned | undefined) => void;
+  /** Discard the user's layout. */
   onReset: () => void;
+  /** Dismiss the panel. */
   onClose: () => void;
 }
 
-/** Show/hide, reorder and pin, plus the "reset my preferences" escape hatch. */
+/**
+ * The side panel for showing, hiding, reordering and pinning columns, with the
+ * "reset my preferences" escape hatch.
+ *
+ * {@link DataGrid} renders this from its toolbar; exported for custom surfaces.
+ */
 export function ColumnsPanel<T, C>({
   columns,
   isHidden,

@@ -34,47 +34,210 @@ import { GridOverlay } from './GridOverlay';
 import { GridPagination } from './GridPagination';
 import { GridRow } from './GridRow';
 
+/**
+ * Props for {@link DataGrid}.
+ *
+ * @typeParam T - The row type.
+ * @typeParam C - The {@link DataGridProps.context | context} type. Inferred
+ * from `context`; defaults to `unknown`.
+ */
 export interface DataGridProps<T, C = unknown> {
+  /**
+   * The columns to render.
+   *
+   * @remarks
+   * Define these as a module constant or memoise on `[]` — anything volatile
+   * belongs in {@link DataGridProps.context} instead.
+   */
   columns: ColumnDef<T, C>[];
+  /**
+   * Where rows come from. Memoise it; a new identity causes a refetch.
+   *
+   * @see {@link HxDataSource}
+   */
   dataSource: HxDataSource<T>;
+  /**
+   * Stable identity for a row, used for selection, editing and
+   * {@link GridApi.updateRows}. Must be stable across refetches.
+   */
   getRowId: (row: T) => RowId;
 
-  /** Volatile app state handed to every cell renderer. */
+  /**
+   * Volatile app state handed to every cell renderer.
+   *
+   * This is the escape hatch that keeps `columns` static: put in-flight ids,
+   * permission checks and event handlers here, and changing them re-renders
+   * cells without rebuilding a single column definition.
+   */
   context?: C;
 
-  /** localStorage key for column/sort/filter/page-size preferences. */
+  /**
+   * `localStorage` key for column layout, sort, filters and page size.
+   *
+   * Omit it and nothing is persisted. Stored under `hxg:<storageKey>`.
+   *
+   * @see {@link PersistedGridState}
+   */
   storageKey?: string;
 
+  /**
+   * Row height in pixels. Fixed for every row — that is what keeps
+   * virtualization O(1).
+   * @defaultValue 36
+   */
   rowHeight?: number;
+  /**
+   * Header height in pixels.
+   * @defaultValue 36
+   */
   headerHeight?: number;
-  /** Show the always-visible filter inputs under the header. */
+  /**
+   * Show the always-visible filter inputs under the header.
+   * @defaultValue true
+   */
   floatingFilter?: boolean;
+  /**
+   * Show the checkbox selection column.
+   * @defaultValue true
+   */
   selectable?: boolean;
 
+  /**
+   * Rows per page before the user changes it. A persisted preference wins.
+   * @defaultValue 20
+   */
   defaultPageSize?: number;
+  /**
+   * Page sizes offered in the pager.
+   * @defaultValue [10, 20, 50, 100]
+   */
   pageSizeOptions?: number[];
 
-  /** Enables row editing. Return `{ ok:false, errors }` to keep the row open. */
+  /**
+   * Enables row editing. Called when the user commits a row.
+   *
+   * Return `{ ok: false, errors }` to keep the row open and paint each message
+   * onto the cell whose column id it is keyed by.
+   *
+   * @param draft - The edited copy.
+   * @param original - The row as it was before editing.
+   * @see {@link RowCommitResult}
+   */
   onRowCommit?: (draft: T, original: T) => Promise<RowCommitResult> | RowCommitResult;
+  /**
+   * Called whenever the selection changes.
+   * @param ids - Every selected row id, including rows on other pages.
+   */
   onSelectionChanged?: (ids: RowId[]) => void;
   /** Enables dropping files onto a row (e.g. to attach documents to it). */
   onRowFilesDropped?: (row: T, files: File[]) => void;
+  /**
+   * Called when a fetch or a commit throws. Aborted requests are not reported.
+   */
   onError?: (error: unknown) => void;
 
-  /** Rendered above the header; receives the live api. */
+  /**
+   * Rendered into the toolbar strip above the header, left of the built-in
+   * Columns and Export CSV buttons.
+   *
+   * @param api - The live imperative API.
+   */
   toolbar?: (api: GridApi<T>) => ReactNode;
 
+  /**
+   * Shown when a query returns no rows.
+   * @defaultValue 'No rows'
+   */
   emptyMessage?: ReactNode;
+  /**
+   * Base file name for CSV export, without the extension.
+   * @defaultValue 'export'
+   */
   exportFileName?: string;
+  /** Extra classes on the grid's outer frame. */
   className?: string;
-  /** Height of the scrolling area. Defaults to `70vh`. */
+  /**
+   * Height of the whole grid. Any CSS length; a number is treated as pixels.
+   * @defaultValue '70vh'
+   */
   height?: number | string;
 
+  /**
+   * Receives the imperative {@link GridApi}. Accepts a ref object or a
+   * callback ref.
+   */
   apiRef?: Ref<GridApi<T>>;
 }
 
 const DEFAULT_PAGE_SIZES = [10, 20, 50, 100];
 
+/**
+ * A virtualized, server-driven data grid.
+ *
+ * Paging, sorting and filtering are all resolved by your
+ * {@link HxDataSource | data source} — the grid holds one page at a time and
+ * never filters or sorts locally. Rows are windowed at a fixed height, so the
+ * DOM stays small regardless of the result set.
+ *
+ * @typeParam T - The row type.
+ * @typeParam C - The context type, inferred from the `context` prop.
+ *
+ * @example Minimal usage
+ * ```tsx
+ * const columns: ColumnDef<Person>[] = [
+ *   { field: 'name',  header: 'Name', flex: 1, filter: 'text' },
+ *   { field: 'email', header: 'Email', flex: 1 },
+ * ];
+ *
+ * function People() {
+ *   const dataSource = useMemo(
+ *     () => ({ getRows: (request, signal) => api.list(request, signal) }),
+ *     []
+ *   );
+ *
+ *   return (
+ *     <DataGrid
+ *       columns={columns}
+ *       dataSource={dataSource}
+ *       getRowId={(row) => row.id}
+ *     />
+ *   );
+ * }
+ * ```
+ *
+ * @example With editing, persistence and the imperative API
+ * ```tsx
+ * const apiRef = useRef<GridApi<Person>>(null);
+ *
+ * <DataGrid
+ *   columns={columns}
+ *   dataSource={dataSource}
+ *   getRowId={(row) => row.id}
+ *   storageKey="people"
+ *   apiRef={apiRef}
+ *   onRowCommit={async (draft) => {
+ *     const result = await api.save(draft);
+ *     return result.ok ? { ok: true } : { ok: false, errors: result.errors };
+ *   }}
+ *   toolbar={(api) => (
+ *     <button onClick={() => api.refresh({ purge: true })}>Refresh</button>
+ *   )}
+ * />
+ * ```
+ *
+ * @remarks
+ * Styling is plain Tailwind utility classes — there is no stylesheet to import.
+ * Tailwind skips `node_modules` when detecting content, so point it at the
+ * shipped bundle explicitly:
+ *
+ * ```css
+ * @import "tailwindcss";
+ * @source "../node_modules/@helix-x/datagrid-ui/dist/index.js";
+ * ```
+ *
+ * @see {@link DataGridProps} for every option.
+ * @see {@link GridApi} for what `apiRef` and `toolbar` receive.
+ */
 export function DataGrid<T, C = unknown>({
   columns,
   dataSource,

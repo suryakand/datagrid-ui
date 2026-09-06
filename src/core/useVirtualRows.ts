@@ -1,34 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** The slice of rows currently worth rendering. */
 export interface VirtualWindow {
+  /** First row index to render, inclusive. Includes overscan. */
   startIndex: number;
+  /** Index one past the last row to render, exclusive. */
   endIndex: number;
 }
 
+/** Options for {@link useVirtualRows}. */
 export interface UseVirtualRowsOptions {
+  /** How many rows exist in the current page. */
   rowCount: number;
+  /** Fixed height of every row, in pixels. */
   rowHeight: number;
+  /**
+   * Extra rows rendered above and below the viewport, so fast scrolling does
+   * not show blank space.
+   * @defaultValue 6
+   */
   overscan?: number;
 }
 
+/** What {@link useVirtualRows} returns. */
 export interface UseVirtualRowsResult {
+  /** The rows to render right now. */
   window: VirtualWindow;
+  /** `rowCount * rowHeight` — the spacer height that gives the correct scrollbar. */
   totalHeight: number;
-  /** Attach to the scrolling element. */
+  /** Attach to the scrolling element's `onScroll`. */
   onScroll: (event: { currentTarget: HTMLElement }) => void;
   /** Call when the viewport is measured or resized. */
   setViewportHeight: (height: number) => void;
+  /** Live scroll offset, readable without causing a re-render. */
   scrollTopRef: React.RefObject<number>;
 }
 
 /**
  * Fixed-height row windowing.
  *
+ * @param options - Row count, row height and overscan.
+ * @returns The visible window plus the handlers that maintain it.
+ *
+ * @remarks
  * Fixed heights are a deliberate constraint: they make the visible range O(1)
  * to compute and remove the measure-then-reflow pass that variable heights
  * force. Scroll position is tracked in a ref and only promoted to state when
- * the computed window actually changes, so scrolling within a row does not
- * re-render anything.
+ * the computed window actually changes, so scrolling within a single row
+ * re-renders nothing.
+ *
+ * @example
+ * ```tsx
+ * const { window, totalHeight, onScroll, setViewportHeight } = useVirtualRows({
+ *   rowCount: rows.length,
+ *   rowHeight: 36,
+ * });
+ *
+ * <div onScroll={onScroll} style={{ overflow: 'auto' }}>
+ *   <div style={{ height: totalHeight }}>
+ *     {rows.slice(window.startIndex, window.endIndex).map(renderRow)}
+ *   </div>
+ * </div>
+ * ```
  */
 export function useVirtualRows({
   rowCount,

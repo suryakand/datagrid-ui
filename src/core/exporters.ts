@@ -12,6 +12,18 @@ function escapeCsv(value: string, separator: string): string {
   return needsQuotes ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/**
+ * Serialises rows to delimited text with a header line.
+ *
+ * Values are quoted per RFC 4180 when they contain the separator, a quote or a
+ * newline. Columns marked {@link ColumnDef.suppressExport} are skipped, and
+ * lines are joined with CRLF.
+ *
+ * @param rows - The rows to serialise.
+ * @param columns - Columns to include, in output order.
+ * @param separator - The field separator.
+ * @returns The delimited document.
+ */
 export function toDelimited<T>(
   rows: T[],
   columns: Array<ResolvedColumn<T, never> | ColumnDef<T, never>>,
@@ -34,6 +46,19 @@ export function toDelimited<T>(
   return lines.join('\r\n');
 }
 
+/**
+ * Serialises rows to CSV.
+ *
+ * @param rows - The rows to serialise.
+ * @param columns - Columns to include, in output order.
+ * @param separator - Field separator.
+ * @returns The CSV document, without a BOM — {@link downloadCsv} adds one.
+ *
+ * @example
+ * ```ts
+ * const csv = toCsv(api.getSelectedRows(), columns);
+ * ```
+ */
 export function toCsv<T>(
   rows: T[],
   columns: Array<ResolvedColumn<T, never> | ColumnDef<T, never>>,
@@ -42,7 +67,14 @@ export function toCsv<T>(
   return toDelimited(rows, columns, separator);
 }
 
-/** Tab-separated, which is what spreadsheets expect from the clipboard. */
+/**
+ * Serialises rows to tab-separated text, which is what spreadsheets expect to
+ * receive from the clipboard.
+ *
+ * @param rows - The rows to serialise.
+ * @param columns - Columns to include, in output order.
+ * @returns The TSV document.
+ */
 export function toTsv<T>(
   rows: T[],
   columns: Array<ResolvedColumn<T, never> | ColumnDef<T, never>>
@@ -50,6 +82,15 @@ export function toTsv<T>(
   return toDelimited(rows, columns, '\t');
 }
 
+/**
+ * Triggers a browser download of CSV content.
+ *
+ * A UTF-8 BOM is prepended, which is what makes Excel read the file as UTF-8
+ * rather than ANSI. The `.csv` extension is added if missing.
+ *
+ * @param content - The CSV document, e.g. from {@link toCsv}.
+ * @param fileName - File name, with or without the extension.
+ */
 export function downloadCsv(content: string, fileName: string): void {
   // The BOM is what makes Excel read the file as UTF-8 rather than ANSI.
   const blob = new Blob(['﻿' + content], {
@@ -65,6 +106,12 @@ export function downloadCsv(content: string, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Copies text to the clipboard, falling back to a hidden `textarea` on browsers
+ * and non-secure origins without the async clipboard API.
+ *
+ * @param text - The text to copy.
+ */
 export async function copyToClipboard(text: string): Promise<void> {
   if (navigator?.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);

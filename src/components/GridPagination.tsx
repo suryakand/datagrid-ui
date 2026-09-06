@@ -1,10 +1,18 @@
+/** Props for {@link GridPagination}. */
 export interface GridPaginationProps {
+  /** Zero-based current page. */
   page: number;
+  /** Rows per page. */
   pageSize: number;
+  /** Total across all pages. `-1` when the server reported it as unknown. */
   totalRows: number;
+  /** Page sizes to offer in the selector. */
   pageSizeOptions: number[];
+  /** Disables the controls while a fetch is in flight. */
   isLoading: boolean;
+  /** Called with the new zero-based page index. */
   onPageChange: (page: number) => void;
+  /** Called with the new page size. */
   onPageSizeChange: (pageSize: number) => void;
 }
 
@@ -13,6 +21,12 @@ const BUTTON_CLASS =
   'hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 ' +
   'dark:border-gray-600 dark:text-gray-200 dark:hover:bg-white/5';
 
+/**
+ * The grid's pager: range summary, page size selector and navigation.
+ *
+ * {@link DataGrid} renders this itself. It is exported for apps that build a
+ * custom surface on the same hooks.
+ */
 export function GridPagination({
   page,
   pageSize,

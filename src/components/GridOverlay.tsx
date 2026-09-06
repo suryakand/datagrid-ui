@@ -1,13 +1,20 @@
 import type { ReactNode } from 'react';
 
+/** Props for {@link GridOverlay}. */
 export interface GridOverlayProps {
+  /** Which state to show. */
   kind: 'loading' | 'empty' | 'error';
+  /** Message body. Falls back to a default per `kind`. */
   message?: ReactNode;
 }
 
 /**
- * Sits over the row area rather than replacing it, so the header and column
- * widths stay put while a refetch is in flight.
+ * The loading, empty and error states shown over the row area.
+ *
+ * Overlays rather than replaces, so the header and column widths stay put while
+ * a refetch is in flight.
+ *
+ * @param props - Which state to show, and the message.
  */
 export function GridOverlay({ kind, message }: GridOverlayProps) {
   if (kind === 'loading') {

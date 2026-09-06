@@ -10,7 +10,7 @@ classes, so there is no CSS file to import and no theme engine to configure.
 ## Example
 
 A runnable Vite gallery with a mock stock-market API lives in
-[`example/`](./example):
+[`example/`](https://github.com/suryakand/datagrid-ui/tree/main/example):
 
 ```bash
 cd example
@@ -136,6 +136,40 @@ ids, permission checks, event handlers — belongs in `context`, which is passed
 to every `cellRenderer`. Changing `context` re-renders cells without rebuilding
 a single column definition.
 
+## API documentation
+
+Full generated reference: **<https://suryakand.github.io/datagrid-ui/>**
+
+Every exported symbol carries a doc comment — parameters, return values,
+defaults, and runnable examples on the types you actually write
+([`ColumnDef`][cd], [`DataGridProps`][dgp], [`HxDataSource`][ds],
+[`GridApi`][api]). The comments ship inside `dist/index.d.ts` too, so they
+appear on hover in any editor without visiting the site.
+
+[cd]: https://suryakand.github.io/datagrid-ui/interfaces/ColumnDef.html
+[dgp]: https://suryakand.github.io/datagrid-ui/interfaces/DataGridProps.html
+[ds]: https://suryakand.github.io/datagrid-ui/interfaces/HxDataSource.html
+[api]: https://suryakand.github.io/datagrid-ui/interfaces/GridApi.html
+
+Build it locally:
+
+```bash
+npm run docs         # -> docs/
+npm run docs:watch
+```
+
+The generator is [TypeDoc][td], not JSDoc. It reads the same `/** ... */`
+comments but takes parameter and return types from TypeScript itself, so
+signatures cannot drift from the code the way hand-written `@param {Type}`
+annotations do.
+
+[td]: https://typedoc.org
+
+`typedoc.json` turns on link, export and coverage validation, and CI builds with
+`--treatWarningsAsErrors`. A broken `{@link}`, a type referenced from the public
+API but never exported, or a new export with no doc comment fails the docs build
+rather than shipping a gap.
+
 ## Local development
 
 ```bash
@@ -143,6 +177,7 @@ npm install       # build toolchain only; React comes from the host app
 npm run build     # dist/ — ESM, CJS and .d.ts
 npm run dev       # rebuild on change
 npm run typecheck
+npm run docs      # docs/ — generated API reference
 ```
 
 When an app consumes this package through a relative path or `npm link`, npm
@@ -155,6 +190,25 @@ should still be told to dedupe:
 // vite.config.ts
 resolve: { dedupe: ['react', 'react-dom'] }
 ```
+
+## Releasing
+
+Two workflows, deliberately separate:
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `.github/workflows/publish.yml` | push to `main` | typecheck, build, publish to npm, tag `v<version>`, create the GitHub release, then commit the next version bump |
+| `.github/workflows/docs.yml` | the publish workflow completing successfully | rebuild the API reference at the released commit and deploy it to GitHub Pages |
+
+The docs workflow keys off `workflow_run` rather than `on: release`. The publish
+job creates its release with the default `GITHUB_TOKEN`, and events raised by
+that token deliberately do not trigger further workflows — an `on: release`
+trigger would never fire. It also checks out the publish run's `head_sha`, so
+the documentation describes the code that was actually released rather than the
+version-bump commit pushed on top of it.
+
+**Repository settings this needs:** Pages source set to **GitHub Actions**
+(Settings → Pages), and an `NPM_TOKEN` secret for the publish workflow.
 
 ## Packaging
 

@@ -8,10 +8,13 @@ import type {
 } from '../types';
 
 /**
- * Every wire-format filter shape is built here, so the contract with the server
- * is defined in exactly one place.
+ * Builders and helpers for the wire-format filter shapes.
+ *
+ * Every filter the grid sends is constructed here, so the contract with the
+ * server is defined in exactly one place.
  */
 
+/** Every text operator, in the order the filter UI lists them. */
 export const TEXT_FILTER_TYPES: TextFilterType[] = [
   'contains',
   'notContains',
@@ -23,6 +26,7 @@ export const TEXT_FILTER_TYPES: TextFilterType[] = [
   'notBlank',
 ];
 
+/** Every numeric operator, in the order the filter UI lists them. */
 export const NUMBER_FILTER_TYPES: NumberFilterType[] = [
   'equals',
   'notEqual',
@@ -35,6 +39,7 @@ export const NUMBER_FILTER_TYPES: NumberFilterType[] = [
   'notBlank',
 ];
 
+/** Every date operator, in the order the filter UI lists them. */
 export const DATE_FILTER_TYPES: DateFilterType[] = [
   'equals',
   'notEqual',
@@ -45,6 +50,11 @@ export const DATE_FILTER_TYPES: DateFilterType[] = [
   'notBlank',
 ];
 
+/**
+ * Human-readable label for each operator, e.g. `notEqual` → `'Not equal'`.
+ *
+ * Replace an entry to relabel an operator throughout the filter UI.
+ */
 export const FILTER_TYPE_LABELS: Record<string, string> = {
   contains: 'Contains',
   notContains: 'Does not contain',
@@ -63,15 +73,34 @@ export const FILTER_TYPE_LABELS: Record<string, string> = {
   after: 'After',
 };
 
-/** Filter types that need no operand. */
+/**
+ * Whether an operator takes no operand — `blank` and `notBlank`.
+ *
+ * @param type - The operator name.
+ * @returns `true` when no value is needed.
+ */
 export function isUnaryFilter(type: string): boolean {
   return type === 'blank' || type === 'notBlank';
 }
 
+/**
+ * Whether an operator takes two operands — currently only `inRange`.
+ *
+ * @param type - The operator name.
+ * @returns `true` when both bounds are needed.
+ */
 export function isRangeFilter(type: string): boolean {
   return type === 'inRange';
 }
 
+/**
+ * The operator a filter starts on when its popover is first opened.
+ *
+ * `contains` for text, `equals` for numbers and dates.
+ *
+ * @param kind - The filter kind.
+ * @returns The default operator name.
+ */
 export function defaultFilterType(kind: FilterKind): string {
   switch (kind) {
     case 'text':
@@ -85,6 +114,20 @@ export function defaultFilterType(kind: FilterKind): string {
   }
 }
 
+/**
+ * Builds a text filter, or `null` when there is nothing to send.
+ *
+ * @param type - The operator.
+ * @param filter - The search term. Ignored for unary operators.
+ * @returns The filter model, or `null` if a non-unary operator got a blank term.
+ *
+ * @example
+ * ```ts
+ * buildTextFilter('contains', 'acme');
+ * // { filterType: 'text', type: 'contains', filter: 'acme' }
+ * buildTextFilter('contains', '   '); // null
+ * ```
+ */
 export function buildTextFilter(type: TextFilterType, filter: string): HxFilterModel | null {
   if (!isUnaryFilter(type) && filter.trim() === '') return null;
   return isUnaryFilter(type)
@@ -92,6 +135,22 @@ export function buildTextFilter(type: TextFilterType, filter: string): HxFilterM
     : { filterType: 'text', type, filter };
 }
 
+/**
+ * Builds a numeric filter, or `null` when the input is incomplete.
+ *
+ * @param type - The operator.
+ * @param filter - The operand, or lower bound for `inRange`, as typed.
+ * @param filterTo - The upper bound. Required for `inRange`.
+ * @returns The filter model, or `null` if a required operand is missing or not
+ * a number.
+ *
+ * @example
+ * ```ts
+ * buildNumberFilter('inRange', '10', '100');
+ * // { filterType: 'number', type: 'inRange', filter: 10, filterTo: 100 }
+ * buildNumberFilter('inRange', '10'); // null — no upper bound
+ * ```
+ */
 export function buildNumberFilter(
   type: NumberFilterType,
   filter: string,
@@ -111,6 +170,14 @@ export function buildNumberFilter(
   return { filterType: 'number', type, filter: from };
 }
 
+/**
+ * Builds a date filter, or `null` when the input is incomplete.
+ *
+ * @param type - The operator.
+ * @param dateFrom - Lower bound, formatted `YYYY-MM-DD`.
+ * @param dateTo - Upper bound. Required for `inRange`.
+ * @returns The filter model, or `null` if a required bound is missing.
+ */
 export function buildDateFilter(
   type: DateFilterType,
   dateFrom: string,
@@ -127,12 +194,37 @@ export function buildDateFilter(
   return { filterType: 'date', type, dateFrom };
 }
 
+/**
+ * Builds a set filter, or `null` when nothing is selected.
+ *
+ * Returning `null` rather than an empty set is what clears the filter — see
+ * {@link withFilter}.
+ *
+ * @param values - The selected values.
+ * @returns The filter model, or `null` for an empty selection.
+ */
 export function buildSetFilter(values: string[]): HxFilterModel | null {
   if (values.length === 0) return null;
   return { filterType: 'set', values };
 }
 
-/** Sets or clears one column's entry, returning a new map. */
+/**
+ * Sets or clears one column's filter, returning a new map.
+ *
+ * Never mutates the map it is given, so the result is safe to hand straight to
+ * `setState`.
+ *
+ * @param model - The current filter model.
+ * @param colId - The column to change.
+ * @param filter - The new filter, or `null` to remove the column's entry.
+ * @returns A new filter model.
+ *
+ * @example
+ * ```ts
+ * const next = withFilter(filterModel, 'status', buildSetFilter(['ACTIVE']));
+ * const cleared = withFilter(filterModel, 'status', null);
+ * ```
+ */
 export function withFilter(
   model: FilterModelMap,
   colId: string,
@@ -147,7 +239,13 @@ export function withFilter(
   return next;
 }
 
-/** A short label for the floating filter / header indicator. */
+/**
+ * A short human-readable summary of a filter, for the floating filter input and
+ * the header's active-filter indicator.
+ *
+ * @param filter - The filter to describe.
+ * @returns A short label, e.g. `'Between 10 - 100'` or `'3 selected'`.
+ */
 export function describeFilter(filter: HxFilterModel): string {
   switch (filter.filterType) {
     case 'set':

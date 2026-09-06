@@ -32,18 +32,40 @@ function write(storageKey: string, state: PersistedGridState): void {
   }
 }
 
+/** What {@link useGridState} returns. */
 export interface UseGridStateResult {
-  /** Read once on mount; never re-read, so it is safe as an initial value. */
+  /**
+   * The restored state, read once on mount and never re-read — so it is safe
+   * to use as a `useState` initial value. `undefined` when nothing was saved
+   * or the saved schema version did not match.
+   */
   initial: PersistedGridState | undefined;
+  /** Persist the column layout. */
   saveColumns: (columns: PersistedGridState['columns']) => void;
+  /** Persist the sort model. */
   saveSort: (sort: SortModelItem[]) => void;
+  /** Persist the filter model. */
   saveFilters: (filters: FilterModelMap) => void;
+  /** Persist the page size. */
   savePageSize: (pageSize: number) => void;
+  /** Delete the saved state entirely. */
   clear: () => void;
+  /** Whether anything was restored on mount. */
   hasSavedState: boolean;
 }
 
-/** Versioned, lean localStorage persistence for one grid. */
+/**
+ * Versioned `localStorage` persistence for one grid's layout.
+ *
+ * Writes go through a ref, so saving never causes a re-render. Every read and
+ * write is wrapped: a quota error or a privacy mode degrades to not persisting
+ * rather than throwing, and state saved under a different
+ * {@link GRID_STATE_VERSION} is discarded rather than migrated.
+ *
+ * @param storageKey - Key to store under, namespaced as `hxg:<storageKey>`.
+ * Pass `undefined` to disable persistence entirely.
+ * @returns The restored state and its setters.
+ */
 export function useGridState(storageKey: string | undefined): UseGridStateResult {
   const initialRef = useRef<PersistedGridState | undefined>(
     storageKey ? read(storageKey) : undefined

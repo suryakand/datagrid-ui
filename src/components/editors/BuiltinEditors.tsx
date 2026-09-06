@@ -1,3 +1,11 @@
+/**
+ * The five editors that ship with the grid.
+ *
+ * Each one writes into the row draft through `onChange` and never touches the
+ * network — {@link DataGridProps.onRowCommit} owns persistence. Enter commits
+ * the row, Escape abandons it.
+ */
+
 import type { EditorParams } from '../../types';
 
 const INPUT_CLASS =
@@ -27,6 +35,12 @@ function keyHandler(params: { onCommit: () => void; onCancel: () => void }) {
   };
 }
 
+/**
+ * Single-line text input. The default editor when a column sets
+ * `editable: true` without naming one.
+ *
+ * Reads `editorParams.placeholder`.
+ */
 export function TextEditor<T, C>({
   value,
   onChange,
@@ -51,6 +65,12 @@ export function TextEditor<T, C>({
   );
 }
 
+/**
+ * Numeric input. Writes a `number`, or `null` when the field is cleared, so an
+ * empty cell is never stored as `NaN` or `''`.
+ *
+ * Reads `editorParams.placeholder`.
+ */
 export function NumberEditor<T, C>({
   value,
   onChange,
@@ -75,6 +95,10 @@ export function NumberEditor<T, C>({
   );
 }
 
+/**
+ * Native date input. Reads and writes `YYYY-MM-DD` strings, matching
+ * {@link DateFilterModel}.
+ */
 export function DateEditor<T, C>({
   value,
   onChange,
@@ -105,6 +129,10 @@ export function DateEditor<T, C>({
   );
 }
 
+/**
+ * Dropdown over `editorParams.options`. Values round-trip by identity, so a
+ * non-string option value is preserved rather than stringified.
+ */
 export function SelectEditor<T, C>({
   value,
   onChange,
@@ -140,6 +168,7 @@ export function SelectEditor<T, C>({
   );
 }
 
+/** Boolean checkbox. Writes `true` or `false`, never `undefined`. */
 export function CheckboxEditor<T, C>({
   value,
   onChange,

@@ -1,24 +1,55 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+/**
+ * A row's stable identity, as returned by `getRowId`.
+ *
+ * Selection, editing and {@link GridApi.updateRows} all key off this.
+ */
 export type RowId = string | number;
 
+/**
+ * What {@link useSelectionModel} returns.
+ *
+ * @typeParam T - The row type.
+ */
 export interface UseSelectionModelResult<T> {
+  /** Every selected id, including rows on pages that are not loaded. */
   selectedIds: Set<RowId>;
+  /** Whether one id is selected. */
   isSelected: (id: RowId) => boolean;
   /** True when every row currently on screen is selected. */
   allVisibleSelected: boolean;
+  /** True when some, but not all, visible rows are selected. */
   someVisibleSelected: boolean;
+  /**
+   * Toggle one row.
+   * @param id - The row to toggle.
+   * @param index - Its index in the loaded page, used as the shift anchor.
+   * @param shiftKey - Extend from the last toggled row instead of toggling one.
+   */
   toggleRow: (id: RowId, index: number, shiftKey: boolean) => void;
+  /** Select every visible row, or deselect them if all are already selected. */
   toggleAllVisible: () => void;
+  /** Deselect everything, including rows on other pages. */
   clear: () => void;
+  /** Select every row on the current page. */
   selectAllVisible: () => void;
+  /** The selected rows that are currently loaded. */
   getSelectedRows: () => T[];
 }
 
 /**
- * Selection lives here as a real React model rather than being read back out of
- * persisted grid state -- that indirection is what made the previous
- * implementation's "is anything selected?" check unreliable.
+ * Multi-row selection with shift-range support.
+ *
+ * Selection survives paging: ids stay selected even when their rows are not
+ * loaded, which is why `getSelectedRows` returns only the loaded subset while
+ * `selectedIds` holds everything.
+ *
+ * @typeParam T - The row type.
+ * @param rows - The currently loaded page.
+ * @param getRowId - Stable identity for a row.
+ * @param onSelectionChanged - Called with every selected id after each change.
+ * @returns The selection state and its mutators.
  */
 export function useSelectionModel<T>(
   rows: T[],

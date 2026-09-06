@@ -1,24 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FilterModelMap, HxDataSource, HxRowsRequest, SortModelItem } from '../types';
 
+/**
+ * Options for {@link useServerDataSource}.
+ *
+ * @typeParam T - The row type.
+ */
 export interface UseServerDataSourceOptions<T> {
+  /** Where rows come from. Memoise it, or every render refetches. */
   dataSource: HxDataSource<T>;
+  /** Rows per page. */
   pageSize: number;
+  /** Zero-based page index. */
   page: number;
+  /** Active sorts, primary first. */
   sortModel: SortModelItem[];
+  /** Active filters, keyed by column id. */
   filterModel: FilterModelMap;
-  /** Blocks to keep around so paging back and forth does not refetch. */
+  /**
+   * Blocks to keep around so paging back and forth does not refetch.
+   * @defaultValue 3
+   */
   maxCachedBlocks?: number;
+  /** Called when a fetch throws. Aborted requests are not reported. */
   onError?: (error: unknown) => void;
 }
 
+/**
+ * What {@link useServerDataSource} returns.
+ *
+ * @typeParam T - The row type.
+ */
 export interface UseServerDataSourceResult<T> {
+  /** Rows for the current page. Empty while the first fetch is in flight. */
   rows: T[];
+  /** Total across all pages, from the response's `lastRow`. */
   totalRows: number;
+  /** True while a fetch is in flight. */
   isLoading: boolean;
+  /** The last error, or `null`. */
   error: unknown;
+  /**
+   * Re-fetch the current page.
+   * @param options - `purge: true` drops every cached block first.
+   */
   refresh: (options?: { purge?: boolean }) => void;
-  /** Patch loaded rows in place, keyed by the grid's row id. */
+  /**
+   * Patch loaded rows in place, matched by id. Ids that are not loaded are
+   * ignored. No network request is made.
+   */
   patchRows: (rows: T[], getRowId: (row: T) => string | number) => void;
 }
 
@@ -45,11 +75,29 @@ function buildRequest(
 /**
  * Server-side paging with a small block cache.
  *
- * Two things here that the ag-grid screen this replaces did not do: every
- * request carries an AbortController and a sequence number, so a slow response
- * for an old sort/filter can never overwrite a newer one; and the cache is
- * dropped wholesale when the query changes, so stale blocks are never mixed
+ * {@link DataGrid} uses this internally; call it directly only when building a
+ * custom surface on top of the same data contract.
+ *
+ * @typeParam T - The row type.
+ * @param options - Data source, page, sort and filters.
+ * @returns The current page plus loading state and imperative helpers.
+ *
+ * @remarks
+ * Every request carries an `AbortController` and a sequence number, so a slow
+ * response for an old sort or filter can never overwrite a newer one. The cache
+ * is dropped wholesale when the query changes, so stale blocks are never mixed
  * with fresh ones.
+ *
+ * @example
+ * ```ts
+ * const { rows, totalRows, isLoading, refresh } = useServerDataSource({
+ *   dataSource,
+ *   page: 0,
+ *   pageSize: 50,
+ *   sortModel: [{ colId: 'name', sort: 'asc' }],
+ *   filterModel: {},
+ * });
+ * ```
  */
 export function useServerDataSource<T>({
   dataSource,

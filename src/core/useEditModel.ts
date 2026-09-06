@@ -2,20 +2,44 @@ import { useCallback, useRef, useState } from 'react';
 import type { RowCommitResult } from '../types';
 import type { RowId } from './useSelectionModel';
 
+/**
+ * The row currently being edited.
+ *
+ * @typeParam T - The row type.
+ */
 export interface EditState<T> {
+  /** Which row is open. */
   rowId: RowId;
+  /** The working copy, updated as the user types. */
   draft: T;
+  /** The row as it was when editing started, for cancel and for the commit callback. */
   original: T;
+  /** Server-supplied messages from the last rejected commit, keyed by column id. */
   errors: Record<string, string>;
+  /** True while a commit is in flight. */
   isSaving: boolean;
 }
 
+/**
+ * What {@link useEditModel} returns.
+ *
+ * @typeParam T - The row type.
+ */
 export interface UseEditModelResult<T> {
+  /** The open row, or `null` when nothing is being edited. */
   edit: EditState<T> | null;
+  /** Whether a given row is the one currently open. */
   isEditing: (rowId: RowId) => boolean;
+  /** Open a row for editing, replacing any row already open. */
   start: (rowId: RowId, row: T) => void;
+  /**
+   * Write one field into the draft. Accepts a dotted path, creating
+   * intermediate objects as needed.
+   */
   setField: (field: string, value: unknown) => void;
+  /** Close without saving, discarding the draft. */
   cancel: () => void;
+  /** Run the commit callback. Keeps the row open if it returns `ok: false`. */
   commit: () => Promise<void>;
 }
 
@@ -38,9 +62,17 @@ function setPath<T>(row: T, path: string, value: unknown): T {
 /**
  * Row-level editing against a draft copy.
  *
- * The draft never touches the data source, and the editors never call an API --
- * the single `onCommit` callback owns validation and persistence, so the app can
- * plug in whatever schema library it uses without the grid knowing about it.
+ * @typeParam T - The row type.
+ * @param onCommit - Owns validation and persistence. Return
+ * `{ ok: false, errors }` to keep the row open with per-field messages.
+ * @returns The edit state and its mutators.
+ *
+ * @remarks
+ * The draft never touches the data source, and editors never call an API — the
+ * single commit callback owns both, so an app can plug in whatever schema
+ * library it uses without the grid knowing about it.
+ *
+ * @see {@link RowCommitResult}
  */
 export function useEditModel<T>(
   onCommit: (draft: T, original: T) => Promise<RowCommitResult> | RowCommitResult
