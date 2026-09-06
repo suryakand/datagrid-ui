@@ -9,7 +9,8 @@ classes, so there is no CSS file to import and no theme engine to configure.
 
 ## Example
 
-A runnable Vite app with a mock stock-market API lives in [`example/`](./example):
+A runnable Vite gallery with a mock stock-market API lives in
+[`example/`](./example):
 
 ```bash
 cd example
@@ -17,9 +18,20 @@ npm install
 npm run dev
 ```
 
-480 symbols paged, sorted and filtered server-side, with live prices, inline
-editing and server-side field validation. `example/src/columns.tsx` is the file
-worth reading first.
+Four examples, all against a real server-side backend:
+
+| | |
+| --- | --- |
+| **Server-side market data** | 480 symbols; paging, sorting and all four filter kinds resolved on the server, plus inline editing with server-side validation |
+| **Images in rows** | company logos and analyst avatars, lazy-loaded with reserved boxes and error fallbacks |
+| **Live updates** | an SSE feed patched in with `api.updateRows()` — no refetch, no lost scroll position |
+| **Theme customization** | accent, density and dark mode driven entirely by CSS custom properties |
+
+Each example sits behind a **Preview / Code** toggle — the running grid, or its
+real source — and is followed by a **How it works** section pairing the
+explanation with the code that implements it, deep-linked to the exact lines on
+GitHub. Every snippet is extracted from the source files at build time, so none
+of it can drift.
 
 ## Install
 

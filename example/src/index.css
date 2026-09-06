@@ -1,3 +1,4 @@
+/* #region tailwind-source */
 @import "tailwindcss";
 
 /*
@@ -6,11 +7,13 @@
  * so point at it explicitly or the grid renders unstyled.
  */
 @source "../node_modules/@helix-x/datagrid-ui/dist/index.js";
+/* #endregion */
 
 /* The grid uses the class-based dark variant (<html class="dark">). */
 @custom-variant dark (&:is(.dark *));
 
 /* The grid renders against the brand / gray / error families. */
+/* #region theme-tokens */
 @theme {
   --color-brand-25:  #f2f7ff;
   --color-brand-50:  #ecf3ff;
@@ -25,6 +28,7 @@
   --color-error-600: #d92d20;
   --color-error-700: #b42318;
 }
+/* #endregion */
 
 html, body, #root {
   height: 100%;

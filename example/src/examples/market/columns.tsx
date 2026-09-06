@@ -1,6 +1,6 @@
 import type { ColumnDef } from '@helix-x/datagrid-ui';
-import { fetchExchanges, fetchSectors } from './api';
-import type { Stock } from './types';
+import { fetchExchanges, fetchSectors } from '../../api';
+import type { Stock } from '../../types';
 
 /**
  * Volatile app state. Anything that changes at runtime belongs here rather
@@ -62,6 +62,7 @@ export const columns: ColumnDef<Stock, GridContext>[] = [
     filter: 'text',
   },
   {
+    // #region set-filter-async
     field: 'sector',
     header: 'Sector',
     width: 170,
@@ -69,6 +70,7 @@ export const columns: ColumnDef<Stock, GridContext>[] = [
     // A function makes the popover load its options from the API the first
     // time it opens, instead of hard-coding them in the client.
     filterParams: { values: fetchSectors },
+    // #endregion
   },
   {
     field: 'exchange',
@@ -192,6 +194,7 @@ export const columns: ColumnDef<Stock, GridContext>[] = [
     valueFormatter: formatDateTime,
   },
   {
+    // #region editable-select
     field: 'rating',
     header: 'Rating',
     width: 110,
@@ -206,6 +209,7 @@ export const columns: ColumnDef<Stock, GridContext>[] = [
         { label: 'Sell', value: 'SELL' },
       ],
     },
+    // #endregion
     cellRenderer: ({ row }) => {
       const tone =
         row.rating === 'BUY'

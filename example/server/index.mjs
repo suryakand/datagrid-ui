@@ -9,6 +9,7 @@
 
 import { createServer } from 'node:http';
 import { buildUniverse, tick, SECTORS, EXCHANGES, RATINGS } from './data.mjs';
+import { avatarSvg, logoSvg } from './logo.mjs';
 
 const PORT = Number(process.env.PORT ?? 5174);
 /** Artificial latency, so the grid's loading overlay is actually visible. */
@@ -17,8 +18,49 @@ const LATENCY_MS = Number(process.env.LATENCY_MS ?? 220);
 const rows = buildUniverse();
 const bySymbol = new Map(rows.map((row) => [row.symbol, row]));
 
+/** Open SSE connections for the live-updates example. */
+const streamClients = new Set();
+
 // Live market. Prices move whether or not anyone is looking.
-setInterval(() => tick(rows), 2000).unref?.();
+setInterval(() => {
+  tick(rows);
+  broadcast();
+}, 2000).unref?.();
+
+/**
+ * Fast lane for the live-updates example: a handful of symbols reprice several
+ * times a second and are pushed to every open stream.
+ */
+setInterval(() => {
+  if (streamClients.size === 0) return;
+
+  const batch = [];
+  const count = 3 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < count; i += 1) {
+    const row = rows[Math.floor(Math.random() * rows.length)];
+    const drift = (Math.random() - 0.5) * 0.02;
+    row.price = Number(Math.max(0.5, row.price * (1 + drift)).toFixed(2));
+    row.change = Number((row.price - row.open).toFixed(2));
+    row.changePct = row.open ? Number(((row.change / row.open) * 100).toFixed(2)) : 0;
+    row.volume += Math.floor(Math.random() * 25_000);
+    row.lastTrade = new Date().toISOString();
+    batch.push(row);
+  }
+  broadcast(batch);
+}, 700).unref?.();
+
+function broadcast(batch) {
+  if (streamClients.size === 0) return;
+  const payload = JSON.stringify(batch ?? []);
+  for (const client of streamClients) {
+    // A disconnected client can still be in the set for a tick or two.
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      streamClients.delete(client);
+    }
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /* Filtering                                                                  */
@@ -175,6 +217,48 @@ const server = createServer(async (req, res) => {
   /* Set-filter options, loaded on demand by the grid's filter popover. */
   if (req.method === 'GET' && url.pathname === '/api/meta') {
     return json(res, 200, { sectors: SECTORS, exchanges: EXCHANGES, ratings: RATINGS });
+  }
+
+  /* Company logos and analyst avatars for the images example. */
+  const logoMatch = url.pathname.match(/^\/api\/logo\/([A-Za-z0-9]+)\.svg$/);
+  if (req.method === 'GET' && logoMatch) {
+    const symbol = logoMatch[1].toUpperCase();
+    // A symbol that is not in the universe 404s on purpose, so the renderer's
+    // fallback path is reachable from the browser.
+    if (!bySymbol.has(symbol)) return json(res, 404, { message: 'Unknown symbol' });
+    res.writeHead(200, {
+      'content-type': 'image/svg+xml',
+      'cache-control': 'public, max-age=86400',
+      'access-control-allow-origin': '*',
+    });
+    return res.end(logoSvg(symbol));
+  }
+
+  const avatarMatch = url.pathname.match(/^\/api\/avatar\.svg$/);
+  if (req.method === 'GET' && avatarMatch) {
+    res.writeHead(200, {
+      'content-type': 'image/svg+xml',
+      'cache-control': 'public, max-age=86400',
+      'access-control-allow-origin': '*',
+    });
+    return res.end(avatarSvg(url.searchParams.get('name') ?? '??'));
+  }
+
+  /* Server-sent price ticks for the live-updates example. */
+  if (req.method === 'GET' && url.pathname === '/api/stream') {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      'access-control-allow-origin': '*',
+    });
+    res.write('retry: 2000\n\n');
+    streamClients.add(res);
+    req.on('close', () => {
+      streamClients.delete(res);
+      res.end();
+    });
+    return undefined;
   }
 
   /* The grid's row request. */

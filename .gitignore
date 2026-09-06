@@ -4,3 +4,7 @@ dist/
 .DS_Store
 npm-debug.log*
 *.tgz
+
+# Local smoke-test scaffolding
+.ssr-out/
+.ssr-smoke.tsx
