@@ -36,6 +36,14 @@
     "server-side",
     "tailwind"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suryakand/datagrid-ui.git"
+  },
+  "homepage": "https://github.com/suryakand/datagrid-ui#readme",
+  "bugs": {
+    "url": "https://github.com/suryakand/datagrid-ui/issues"
+  },
   "peerDependencies": {
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"

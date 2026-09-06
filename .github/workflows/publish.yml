@@ -1,0 +1,108 @@
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump applied AFTER publishing (prepares the next release)'
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+
+# One publish at a time: the job pushes a bump commit back to main, and a second
+# concurrent run would publish a version whose tag is already being created.
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    # The post-publish bump commit is pushed back to main and would otherwise
+    # trigger this workflow again in an endless loop.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Pushes from the default GITHUB_TOKEN do not re-trigger workflows,
+          # which is a second layer of loop protection on top of [skip ci].
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Resolve version
+        id: version
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+          # Re-running on a commit that was already released must not fail the
+          # build; npm rejects a duplicate version anyway.
+          if npm view "$name@$version" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$name@$version is already on the registry, skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.version.outputs.published == 'false'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag the release
+        if: steps.version.outputs.published == 'false'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub release
+        if: steps.version.outputs.published == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --title "$TAG" --generate-notes
+
+      - name: Bump version for the next release
+        if: steps.version.outputs.published == 'false'
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version "$BUMP" --no-git-tag-version
+          next=$(node -p "require('./package.json').version")
+          git add package.json package-lock.json
+          git commit -m "chore(release): bump version to $next [skip ci]"
+          # main may have moved while the build ran; the bump only touches
+          # version fields, so a rebase is safe here.
+          git pull --rebase origin main
+          git push origin HEAD:main
