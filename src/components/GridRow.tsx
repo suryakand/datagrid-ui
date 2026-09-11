@@ -60,12 +60,17 @@ function GridRowInner<T, C>({
     ? layout.items.find((item) => isEditable(item.column, row))?.colId
     : undefined;
 
+  // Every row background must be opaque: the sticky selection cell paints the
+  // row's colour through `bg-inherit`, and a translucent tint lets the cells
+  // scrolling underneath it show through. Each tint is therefore pre-mixed with
+  // the grid's surface (white / gray-900) — the colour the alpha version
+  // composited to — rather than expressed as an alpha.
   const background = isRowEditing
-    ? 'bg-brand-25 dark:bg-brand-500/10'
+    ? 'bg-brand-25 dark:bg-[color-mix(in_srgb,var(--color-brand-500)_10%,var(--color-gray-900))]'
     : isSelected
-      ? 'bg-brand-50 dark:bg-brand-500/15'
+      ? 'bg-brand-50 dark:bg-[color-mix(in_srgb,var(--color-brand-500)_15%,var(--color-gray-900))]'
       : rowIndex % 2 === 1
-        ? 'bg-gray-50/60 dark:bg-white/[0.02]'
+        ? 'bg-[color-mix(in_srgb,var(--color-gray-50)_60%,var(--color-white))] dark:bg-[color-mix(in_srgb,var(--color-white)_2%,var(--color-gray-900))]'
         : 'bg-white dark:bg-gray-900';
 
   return (
@@ -73,7 +78,7 @@ function GridRowInner<T, C>({
       role="row"
       aria-rowindex={rowIndex + 1}
       aria-selected={selectable ? isSelected : undefined}
-      className={`absolute left-0 flex border-b border-gray-200 dark:border-gray-700 ${background} hover:bg-brand-25 dark:hover:bg-white/[0.04] ${
+      className={`absolute left-0 flex border-b border-gray-200 dark:border-gray-700 ${background} hover:bg-brand-25 dark:hover:bg-[color-mix(in_srgb,var(--color-white)_4%,var(--color-gray-900))] ${
         isSaving ? 'opacity-60' : ''
       } ${
         isDropTarget

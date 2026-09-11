@@ -87,8 +87,8 @@ export function FloatingFilterRow<T, C>({
     >
       {selectable && (
         <div
-          className="sticky left-0 z-[3] h-full border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
-          style={{ width: SELECTION_COLUMN_WIDTH, minWidth: SELECTION_COLUMN_WIDTH }}
+          className="sticky left-0 h-full border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
+          style={{ width: SELECTION_COLUMN_WIDTH, minWidth: SELECTION_COLUMN_WIDTH, zIndex: 3 }}
         />
       )}
 

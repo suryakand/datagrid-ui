@@ -74,6 +74,12 @@ describe('SelectionCell', () => {
     expect(onRowDoubleClick).not.toHaveBeenCalled();
   });
 
+  // Left-pinned body cells sit at z-index 2 and scroll underneath this cell.
+  it('stacks above left-pinned cells', () => {
+    render(<SelectionCell checked={false} onToggle={() => undefined} />);
+    expect(screen.getByRole('checkbox').parentElement).toHaveStyle({ zIndex: '3' });
+  });
+
   it('exports the fixed width the header and rows both reserve', () => {
     expect(SELECTION_COLUMN_WIDTH).toBe(40);
   });

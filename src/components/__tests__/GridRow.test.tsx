@@ -129,11 +129,31 @@ describe('selection', () => {
 
   it('stripes odd rows and leaves even rows plain', () => {
     const { unmount } = setup({ rowIndex: 1 });
-    expect(screen.getByRole('row').className).toContain('bg-gray-50/60');
+    expect(screen.getByRole('row').className).toContain('var(--color-gray-50)_60%');
     unmount();
 
     setup({ rowIndex: 2 });
     expect(screen.getByRole('row').className).toContain('bg-white');
+  });
+
+  // The sticky selection cell inherits the row background, so an alpha tint on
+  // the row would let horizontally scrolled cells show through the checkbox.
+  it.each([
+    ['even', { rowIndex: 2 }],
+    ['odd', { rowIndex: 1 }],
+    ['selected', { isSelected: true }],
+    ['editing', { isRowEditing: true, draft: row }],
+  ])('keeps the %s row background opaque, hover included', (_, props) => {
+    setup(props);
+    const backgrounds = screen
+      .getByRole('row')
+      .className.split(/\s+/)
+      .filter((name) => /(^|:)bg-/.test(name));
+    expect(backgrounds.length).toBeGreaterThan(0);
+    for (const name of backgrounds) {
+      // No `/NN` opacity modifier, and no colour mixed against `transparent`.
+      expect(name).not.toMatch(/^[^[]*\/|transparent/);
+    }
   });
 });
 
