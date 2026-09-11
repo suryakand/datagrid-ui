@@ -12,5 +12,4 @@ npm-debug.log*
 # Generated API documentation
 docs/
 
-# Test coverage reports
 coverage/
