@@ -11,3 +11,5 @@ npm-debug.log*
 
 # Generated API documentation
 docs/
+
+coverage/
