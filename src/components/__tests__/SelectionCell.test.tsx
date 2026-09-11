@@ -74,6 +74,19 @@ describe('SelectionCell', () => {
     expect(onRowDoubleClick).not.toHaveBeenCalled();
   });
 
+  // GridRow keeps every row background opaque; inheriting it is what stops
+  // horizontally scrolled cells showing through the checkbox column.
+  it('takes the row background in a body row and paints its own in the header', () => {
+    const { unmount } = render(<SelectionCell checked={false} onToggle={() => undefined} />);
+    expect(screen.getByRole('checkbox').parentElement).toHaveClass('bg-inherit');
+    unmount();
+
+    render(<SelectionCell isHeader checked={false} onToggle={() => undefined} />);
+    const header = screen.getByRole('checkbox').parentElement!;
+    expect(header).not.toHaveClass('bg-inherit');
+    expect(header).toHaveClass('bg-gray-100');
+  });
+
   // Left-pinned body cells sit at z-index 2 and scroll underneath this cell.
   it('stacks above left-pinned cells', () => {
     render(<SelectionCell checked={false} onToggle={() => undefined} />);

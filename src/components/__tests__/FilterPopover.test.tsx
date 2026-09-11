@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { FilterPopover, type FilterPopoverProps } from '../FilterPopover';
+import { fakeHorizontalLayout } from '../../test/helpers';
 
 function setup(overrides: Partial<FilterPopoverProps> = {}) {
   const onApply = vi.fn();
@@ -333,5 +334,29 @@ describe('dismissal', () => {
     unmount();
     await userEvent.setup().click(document.body);
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// Exported for custom surfaces, so it must keep itself in view wherever it is
+// mounted, not only inside the grid header.
+describe('placement', () => {
+  it('slides back inside a clipping container it would overhang', () => {
+    // A 240px popover right-aligned to an anchor ending at x=150, inside a
+    // scroller that starts at x=50: it would begin 40px left of the scroller.
+    fakeHorizontalLayout((element) => {
+      if (element.dataset.testid === 'scroller') return { left: 50, width: 600 };
+      if (element.parentElement?.dataset.testid === 'anchor') return { left: 150 - 240, width: 240 };
+      return undefined;
+    });
+    render(
+      <div data-testid="scroller" style={{ overflowX: 'auto' }}>
+        <div data-testid="anchor" style={{ position: 'relative' }}>
+          <FilterPopover kind="text" value={undefined} onApply={vi.fn()} onClose={vi.fn()} />
+        </div>
+      </div>
+    );
+
+    const popover = screen.getByTestId('anchor').firstElementChild as HTMLElement;
+    expect(popover.getBoundingClientRect().left).toBe(54);
   });
 });

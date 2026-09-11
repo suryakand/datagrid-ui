@@ -219,6 +219,47 @@ export async function flushFrames(): Promise<void> {
   });
 }
 
+/** An element's horizontal box, in viewport px. */
+export interface FakeBox {
+  left: number;
+  width: number;
+}
+
+/**
+ * Gives elements the horizontal geometry jsdom never computes.
+ *
+ * `boxOf` is asked for each element that is measured; returning `undefined`
+ * leaves it 0 wide. It is consulted on every measurement, so a test moves
+ * things by changing what it returns. A `translateX(...)` in an element's
+ * inline `transform` moves its box, as it would in a browser. Undone by
+ * `restoreMocks`.
+ */
+export function fakeHorizontalLayout(boxOf: (element: HTMLElement) => FakeBox | undefined) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function (this: HTMLElement) {
+      const box = boxOf(this) ?? { left: 0, width: 0 };
+      const shift = Number(/translateX\((-?[\d.]+)px\)/.exec(this.style.transform)?.[1] ?? 0);
+      const left = box.left + shift;
+      return {
+        left,
+        right: left + box.width,
+        width: box.width,
+        x: left,
+        top: 0,
+        bottom: 0,
+        height: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
+    }
+  );
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return boxOf(this)?.width ?? 0;
+    }
+  );
+}
+
 /** Dispatches a scroll on `element` after setting its `scrollTop`. */
 export function scrollTo(element: HTMLElement, scrollTop: number): void {
   Object.defineProperty(element, 'scrollTop', {

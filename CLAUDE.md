@@ -41,7 +41,10 @@ Shared fixtures and the jsdom gap-fillers live in `src/test/`:
   `PointerEvent`, pointer capture, object URLs.
 - `helpers.tsx` has the row fixtures, three data-source stubs
   (`stubDataSource`, `controllableDataSource` for driving races by hand,
-  `deferred`), and the jsdom drivers.
+  `deferred`), and the jsdom drivers. jsdom computes no layout, so anything
+  that measures elements (the header popups' `useKeepInView`) is tested with
+  `fakeHorizontalLayout`. Tailwind classes carry no CSS in jsdom either: give
+  a clipping container an inline `overflowX` if the code under test must see it.
 
 Two things to know before writing a grid test:
 
@@ -87,6 +90,8 @@ Every request carries an `AbortController` and a sequence number so a slow respo
 No stylesheet ships. The grid renders Tailwind utility classes directly, against the `brand`, `gray` and `error` colour families and the class-based `dark` variant. Consumers must add `@source "../node_modules/@helix-x/datagrid-ui/dist/index.js"` because Tailwind skips `node_modules` — omitting it is the single most common setup failure, and the grid renders completely unstyled.
 
 Because Tailwind v4 compiles utilities to `var(--color-…)`, theming is done by overriding those custom properties at runtime. There is no theme prop and no theme engine — see `example/src/theme.tsx`.
+
+The README still promises Tailwind v3, so classes must compile on both. Tailwind IntelliSense's "can be written as" suggestions are v4-only and must not be applied blindly: `z-[3]` → `z-3` and `!hidden` → `hidden!` both break v3. Sticky and pinned cells therefore set their z-index inline (`style={{ zIndex }}`). The full order: pinned body cells 2, checkbox column and pinned header/filter cells 3, overlay 5, floating filter row 9, header 10, popups 30. Row backgrounds must stay opaque (the sticky checkbox column copies them via `bg-inherit`), so they are `color-mix` values over `var(--color-…)`, and v3 consumers have to define those variables themselves; the README says which.
 
 ### React must not be duplicated
 

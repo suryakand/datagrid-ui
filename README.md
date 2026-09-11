@@ -59,7 +59,22 @@ point it at the shipped bundle explicitly:
 @source "../node_modules/@helix-x/datagrid-ui/dist/index.js";
 ```
 
-On Tailwind v3, add the same path to `content` in `tailwind.config.js`.
+On Tailwind v3, add the same path to `content` in `tailwind.config.js`, and
+define the four colour variables below as well. Row backgrounds (stripe,
+selection, editing, hover) are opaque colours mixed at runtime from
+`var(--color-…)`, so the sticky checkbox column never shows the cells scrolling
+underneath it. v4 emits those variables for you; v3 emits none, and without
+them rows render with no background at all:
+
+```css
+/* Tailwind v3 only */
+:root {
+  --color-white: theme(colors.white);
+  --color-gray-50: theme(colors.gray.50);
+  --color-gray-900: theme(colors.gray.900);
+  --color-brand-500: theme(colors.brand.500);
+}
+```
 
 ### Theme requirements
 

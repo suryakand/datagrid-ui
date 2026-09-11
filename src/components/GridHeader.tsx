@@ -11,6 +11,7 @@ import type {
 import { describeFilter } from '../core/filterModel';
 import { FilterPopover } from './FilterPopover';
 import { SELECTION_COLUMN_WIDTH, SelectionCell } from './SelectionCell';
+import { useKeepInView } from './useKeepInView';
 
 export interface GridHeaderProps<T, C> {
   layout: ColumnLayout<T, C>;
@@ -49,6 +50,42 @@ function SortIndicator({
       {direction === 'asc' ? '↑' : '↓'}
       {showIndex && <sub className="ml-0.5 text-[9px]">{index + 1}</sub>}
     </span>
+  );
+}
+
+/** The ⋮ pin menu. Nudged into view like the filter popover. */
+function ColumnMenu({
+  pinned,
+  onPin,
+  onClose,
+}: {
+  pinned: Pinned | undefined;
+  onPin: (pinned: Pinned | undefined) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useKeepInView(ref);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-gray-200 bg-white py-1 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900"
+      onMouseLeave={onClose}
+    >
+      {(['left', 'right'] as const).map((side) => (
+        <button
+          key={side}
+          type="button"
+          className="block w-full px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/5"
+          onClick={() => {
+            onPin(pinned === side ? undefined : side);
+            onClose();
+          }}
+        >
+          {pinned === side ? `Unpin ${side}` : `Pin ${side}`}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -244,24 +281,11 @@ export function GridHeader<T, C>({
             )}
 
             {openMenu === column.colId && (
-              <div
-                className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-gray-200 bg-white py-1 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900"
-                onMouseLeave={() => setOpenMenu(null)}
-              >
-                {(['left', 'right'] as const).map((side) => (
-                  <button
-                    key={side}
-                    type="button"
-                    className="block w-full px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/5"
-                    onClick={() => {
-                      onPin(column.colId, pinned === side ? undefined : side);
-                      setOpenMenu(null);
-                    }}
-                  >
-                    {pinned === side ? `Unpin ${side}` : `Pin ${side}`}
-                  </button>
-                ))}
-              </div>
+              <ColumnMenu
+                pinned={pinned}
+                onPin={(side) => onPin(column.colId, side)}
+                onClose={() => setOpenMenu(null)}
+              />
             )}
 
             {column.resizable && (

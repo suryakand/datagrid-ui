@@ -245,6 +245,14 @@ export const THEMING_DOCS: DocSection[] = [
           most common setup mistake. On Tailwind v3, add the same path to{' '}
           <C>content</C> in <C>tailwind.config.js</C>.
         </p>
+        <p>
+          v3 has a second step. Row backgrounds are opaque colours mixed at
+          runtime from <C>--color-white</C>, <C>--color-gray-50</C>,{' '}
+          <C>--color-gray-900</C> and <C>--color-brand-500</C>, which v4 emits
+          and v3 does not. Define those four on <C>:root</C> — with{' '}
+          <C>theme(colors.gray.50)</C> and so on — or the rows render without a
+          background.
+        </p>
       </>
     ),
     snippet: { file: 'src/index.css', region: 'tailwind-source' },

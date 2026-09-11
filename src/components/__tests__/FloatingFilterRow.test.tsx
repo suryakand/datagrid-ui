@@ -160,4 +160,13 @@ describe('geometry', () => {
     setup({}, columns, false);
     expect(screen.getByRole('row')).toHaveStyle({ width: '550px' });
   });
+
+  // Matches the header's select-all cell, so unpinned filter inputs scrolled
+  // left pass underneath the gutter rather than over it.
+  it('stacks the gutter above the filter inputs scrolling beneath it', () => {
+    setup();
+    const gutter = screen.getByRole('row').firstElementChild as HTMLElement;
+    expect(gutter).toHaveStyle({ width: '40px', zIndex: '3' });
+    expect(gutter).toHaveClass('sticky', 'left-0');
+  });
 });

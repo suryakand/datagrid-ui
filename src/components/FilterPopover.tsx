@@ -12,6 +12,7 @@ import {
   isRangeFilter,
   isUnaryFilter,
 } from '../core/filterModel';
+import { useKeepInView } from './useKeepInView';
 
 /** Props for {@link FilterPopover}. */
 export interface FilterPopoverProps {
@@ -148,12 +149,18 @@ function SetFilterBody({
   );
 }
 
-/** Header filter menu. Emits the wire-format model directly. */
 /**
  * The per-column filter editor, covering all four
- * {@link FilterKind | filter kinds}.
+ * {@link FilterKind | filter kinds}. Emits the wire-format model directly.
  *
  * {@link DataGrid} opens this from the header; exported for custom surfaces.
+ *
+ * It is absolutely positioned: it hangs below its nearest positioned ancestor,
+ * right-aligned to it. If that would put any part of it outside the window or
+ * outside an ancestor that clips overflow (such as the grid's scroll
+ * viewport), it slides sideways just far enough to fit, and re-fits as
+ * anything scrolls. So opening it under a narrow first column no longer cuts
+ * off its left side.
  */
 export function FilterPopover({
   kind,
@@ -163,6 +170,7 @@ export function FilterPopover({
   onClose,
 }: FilterPopoverProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  useKeepInView(containerRef);
 
   const types =
     kind === 'text'

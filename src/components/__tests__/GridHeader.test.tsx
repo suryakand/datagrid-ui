@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GridHeader } from '../GridHeader';
 import { resolveColumn } from '../../core/values';
 import type { ColumnDef, ColumnLayout, FilterModelMap, SortModelItem } from '../../types';
-import type { Person } from '../../test/helpers';
+import { fakeHorizontalLayout, type Person } from '../../test/helpers';
 
 function layoutOf(definitions: ColumnDef<Person, unknown>[]): ColumnLayout<Person, unknown> {
   let left = 0;
@@ -285,6 +285,17 @@ describe('the column menu', () => {
     expect(onPin).toHaveBeenCalledWith('name', undefined);
   });
 
+  it('closes when the pointer leaves it', async () => {
+    const { onPin, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Options for name' }));
+    const menu = screen.getByRole('button', { name: 'Pin left' }).parentElement!;
+    await user.hover(menu);
+    await user.unhover(menu);
+
+    expect(screen.queryByRole('button', { name: 'Pin left' })).not.toBeInTheDocument();
+    expect(onPin).not.toHaveBeenCalled();
+  });
+
   it('closes the filter popover when the menu opens, and vice versa', async () => {
     const { user } = setup();
 
@@ -297,6 +308,44 @@ describe('the column menu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Filter name' }));
     expect(screen.queryByRole('button', { name: 'Pin left' })).not.toBeInTheDocument();
+  });
+});
+
+// Both popups hang off the right edge of their column, so under a narrow first
+// column they would start left of the grid and be clipped.
+describe('header popups under a narrow first column', () => {
+  // The header cell's only child div without a role (the other is the resize
+  // handle) is whichever popup is open.
+  const isPopup = (element: Element) =>
+    element.tagName === 'DIV' &&
+    !element.hasAttribute('role') &&
+    element.parentElement?.getAttribute('role') === 'columnheader';
+
+  const popupOf = (button: HTMLElement) =>
+    [...button.closest('[role="columnheader"]')!.children].find(isPopup) as HTMLElement;
+
+  function setupNarrow() {
+    // Right-aligned under a column whose right edge is 100px into the page.
+    fakeHorizontalLayout((element) => {
+      if (!isPopup(element)) return undefined;
+      const width = element.textContent?.includes('Apply') ? 240 : 144;
+      return { left: 100 - width, width };
+    });
+    return setup();
+  }
+
+  it('slides the filter popover right until its left edge is visible', async () => {
+    const { user } = setupNarrow();
+    const button = screen.getByRole('button', { name: 'Filter name' });
+    await user.click(button);
+    expect(popupOf(button).getBoundingClientRect().left).toBe(4);
+  });
+
+  it('slides the column menu right until its left edge is visible', async () => {
+    const { user } = setupNarrow();
+    const button = screen.getByRole('button', { name: 'Options for name' });
+    await user.click(button);
+    expect(popupOf(button).getBoundingClientRect().left).toBe(4);
   });
 });
 
