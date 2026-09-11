@@ -212,7 +212,7 @@ Two workflows, deliberately separate:
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `.github/workflows/publish.yml` | push to `main` | typecheck, build, publish to npm, tag `v<version>`, create the GitHub release, then commit the next version bump |
+| `.github/workflows/publish.yml` | push to `main` | typecheck, build, write the release notes, publish to npm, tag `v<version>`, create the GitHub release with those notes, then commit the next version bump |
 | `.github/workflows/docs.yml` | the publish workflow completing successfully | rebuild the API reference at the released commit and deploy it to GitHub Pages |
 
 The docs workflow keys off `workflow_run` rather than `on: release`. The publish
@@ -221,6 +221,18 @@ that token deliberately do not trigger further workflows — an `on: release`
 trigger would never fire. It also checks out the publish run's `head_sha`, so
 the documentation describes the code that was actually released rather than the
 version-bump commit pushed on top of it.
+
+Release notes are built from the commits since the previous `v*` tag by
+`.github/scripts/release-notes.mjs`, because `main` is pushed to directly and
+GitHub's own generated notes only list merged pull requests. Commits written as
+[Conventional Commits](https://www.conventionalcommits.org) are grouped into
+breaking changes, features and fixes; any other message is listed as written,
+so a commit subject is the line users will read. Preview the next release's
+notes with:
+
+```bash
+node .github/scripts/release-notes.mjs
+```
 
 **Repository settings this needs:** Pages source set to **GitHub Actions**
 (Settings → Pages), and an `NPM_TOKEN` secret for the publish workflow.

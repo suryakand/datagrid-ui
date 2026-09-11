@@ -68,6 +68,16 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Written before publishing on purpose: once the version is on npm a re-run
+      # skips every step below, so a failure here must stop the run while it can
+      # still be retried. Built from commits, not pull requests, because main is
+      # pushed to directly and GitHub's --generate-notes would list nothing.
+      - name: Write release notes
+        if: steps.version.outputs.published == 'false'
+        run: |
+          node .github/scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish
         if: steps.version.outputs.published == 'false'
         run: npm publish
@@ -89,7 +99,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
-        run: gh release create "$TAG" --title "$TAG" --generate-notes
+        run: |
+          gh release create "$TAG" --title "$TAG" --verify-tag \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Bump version for the next release
         if: steps.version.outputs.published == 'false'

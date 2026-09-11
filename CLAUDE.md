@@ -139,7 +139,7 @@ When editing example source, keep regions wrapping **syntactically complete** co
 
 Two workflows, deliberately separate:
 
-- `.github/workflows/publish.yml` — on push to `main`: typecheck, build, publish, tag `v<version>`, create the release, then commit the **next** version bump with `[skip ci]`. So `main` always carries the next unpublished version; a normal push publishes whatever is currently in `package.json`.
+- `.github/workflows/publish.yml` — on push to `main`: typecheck, build, publish, tag `v<version>`, create the release, then commit the **next** version bump with `[skip ci]`. So `main` always carries the next unpublished version; a normal push publishes whatever is currently in `package.json`. Release notes come from `.github/scripts/release-notes.mjs` (commits since the previous `v*` tag, Conventional Commit prefixes grouped, `[skip ci]` bumps dropped) and are written **before** `npm publish`: once a version is on npm every later step is skipped on re-run, so anything that can fail belongs ahead of the publish where possible. Commit subjects become the published notes — write them for users.
 - `.github/workflows/docs.yml` — triggered by the publish workflow completing, via `workflow_run`. **Not `on: release`**: the publish job creates its release with the default `GITHUB_TOKEN`, and events raised by that token do not trigger further workflows, so an `on: release` trigger would never fire. It checks out the publish run's `head_sha` so docs describe the released code, not the bump commit.
 
 Requires an `NPM_TOKEN` secret, Actions write permission, and Pages source set to "GitHub Actions".
