@@ -46,6 +46,11 @@ export const MARKET_DOCS: DocSection[] = [
           The column still declares <C>filter: 'set'</C>; nothing else about it
           changes.
         </p>
+        <p>
+          Free-text columns are filtered from the box under their header
+          instead. Once it holds text, the <C>×</C> inside it clears that
+          column's filter.
+        </p>
       </>
     ),
     snippet: { file: 'src/examples/market/columns.tsx', region: 'set-filter-async' },

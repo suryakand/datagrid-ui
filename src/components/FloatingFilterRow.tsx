@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ColumnLayout, FilterModelMap, HxFilterModel } from '../types';
 import { buildTextFilter, describeFilter } from '../core/filterModel';
 import { SELECTION_COLUMN_WIDTH } from './SelectionCell';
@@ -12,13 +12,16 @@ export interface FloatingFilterRowProps<T, C> {
 }
 
 const CELL_INPUT_CLASS =
-  'h-6 w-full rounded border border-gray-300 bg-white px-1.5 text-[11px] text-gray-800 ' +
-  'outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+  'h-6 w-full rounded border border-gray-300 bg-white pl-1.5 pr-5 text-[11px] text-gray-800 ' +
+  'outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 ' +
+  // The × button below replaces the native WebKit cancel glyph.
+  '[&::-webkit-search-cancel-button]:appearance-none';
 
 /**
  * A quick text box under each header. Free-text columns get a `contains`
  * filter; the richer types are read-only here and open the full popover from
  * the header, since a single input cannot express a range or a value set.
+ * A non-empty text box shows a × button that clears the column's filter.
  */
 function FloatingCell({
   colId,
@@ -32,6 +35,7 @@ function FloatingCell({
   onFilterChange: (colId: string, filter: HxFilterModel | null) => void;
 }) {
   const isFreeText = kind === 'text';
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(
     filter?.filterType === 'text' ? (filter.filter ?? '') : ''
   );
@@ -55,17 +59,34 @@ function FloatingCell({
   }
 
   return (
-    <input
-      type="search"
-      className={CELL_INPUT_CLASS}
-      value={draft}
-      aria-label={`Filter ${colId}`}
-      onChange={(event) => {
-        const next = event.target.value;
-        setDraft(next);
-        onFilterChange(colId, buildTextFilter('contains', next));
-      }}
-    />
+    <div className="relative w-full">
+      <input
+        ref={inputRef}
+        type="search"
+        className={CELL_INPUT_CLASS}
+        value={draft}
+        aria-label={`Filter ${colId}`}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          onFilterChange(colId, buildTextFilter('contains', next));
+        }}
+      />
+      {draft !== '' && (
+        <button
+          type="button"
+          aria-label={`Clear ${colId} filter`}
+          className="absolute inset-y-0 right-0 flex w-5 items-center justify-center rounded text-xs text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+          onClick={() => {
+            setDraft('');
+            onFilterChange(colId, null);
+            inputRef.current?.focus();
+          }}
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 

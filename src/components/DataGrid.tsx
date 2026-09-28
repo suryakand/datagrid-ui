@@ -92,7 +92,9 @@ export interface DataGridProps<T, C = unknown> {
    */
   headerHeight?: number;
   /**
-   * Show the always-visible filter inputs under the header.
+   * Show the always-visible filter inputs under the header. Free-text columns
+   * get a search box with a × button that clears that column's filter; other
+   * filter kinds show a read-only summary and are edited from the header popover.
    * @defaultValue true
    */
   floatingFilter?: boolean;

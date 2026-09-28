@@ -149,6 +149,47 @@ describe('typing into a text filter', () => {
   });
 });
 
+describe('the clear button', () => {
+  const clearName = () => screen.queryByRole('button', { name: 'Clear name filter' });
+
+  it('is hidden while the box is empty', () => {
+    setup();
+    expect(clearName()).not.toBeInTheDocument();
+  });
+
+  it('appears once the user types', async () => {
+    const { user } = setup();
+    await user.type(screen.getByRole('searchbox', { name: 'Filter name' }), 'a');
+    expect(clearName()).toBeInTheDocument();
+  });
+
+  it('appears when the box is seeded from the model', () => {
+    setup({ name: { filterType: 'text', type: 'contains', filter: 'ada' } });
+    expect(clearName()).toBeInTheDocument();
+  });
+
+  it('clears the column, empties the box and keeps focus on it', async () => {
+    const { onFilterChange, user } = setup({
+      name: { filterType: 'text', type: 'contains', filter: 'ada' },
+    });
+    await user.click(clearName()!);
+
+    const box = screen.getByRole('searchbox', { name: 'Filter name' });
+    expect(onFilterChange).toHaveBeenLastCalledWith('name', null);
+    expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
+    expect(clearName()).not.toBeInTheDocument();
+  });
+
+  it('is never offered on the read-only summaries', () => {
+    setup({
+      age: { filterType: 'number', type: 'inRange', filter: 10, filterTo: 40 },
+      active: { filterType: 'set', values: ['A', 'B'] },
+    });
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
 describe('geometry', () => {
   it('matches the header width, including the selection gutter', () => {
     setup();
