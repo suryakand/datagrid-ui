@@ -6,6 +6,13 @@ export interface GridPaginationProps {
   pageSize: number;
   /** Total across all pages. `-1` when the server reported it as unknown. */
   totalRows: number;
+  /**
+   * Rows on the current page. Only consulted when `totalRows` is `-1`: a
+   * full page means there may be another, so Next stays enabled and the
+   * summary reads "of many" instead of a count.
+   * @defaultValue `pageSize`
+   */
+  pageRowCount?: number;
   /** Page sizes to offer in the selector. */
   pageSizeOptions: number[];
   /** Disables the controls while a fetch is in flight. */
@@ -31,14 +38,18 @@ export function GridPagination({
   page,
   pageSize,
   totalRows,
+  pageRowCount = pageSize,
   pageSizeOptions,
   isLoading,
   onPageChange,
   onPageSizeChange,
 }: GridPaginationProps) {
-  const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
-  const first = totalRows === 0 ? 0 : page * pageSize + 1;
-  const last = Math.min(totalRows, (page + 1) * pageSize);
+  const unknownTotal = totalRows < 0;
+  const pageCount = unknownTotal ? null : Math.max(1, Math.ceil(totalRows / pageSize));
+  const loaded = unknownTotal ? page * pageSize + pageRowCount : totalRows;
+  const first = loaded === 0 || (unknownTotal && pageRowCount === 0) ? 0 : page * pageSize + 1;
+  const last = Math.min(loaded, (page + 1) * pageSize);
+  const hasNext = pageCount == null ? pageRowCount >= pageSize : page + 1 < pageCount;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 bg-gray-50 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800/60">
@@ -59,7 +70,7 @@ export function GridPagination({
         </label>
 
         <span className="text-xs text-gray-600 dark:text-gray-300">
-          {isLoading ? 'Loading...' : `${first}-${last} of ${totalRows}`}
+          {isLoading ? 'Loading...' : `${first}-${last} of ${unknownTotal ? 'many' : totalRows}`}
         </span>
       </div>
 
@@ -81,12 +92,13 @@ export function GridPagination({
           ‹ Prev
         </button>
         <span className="px-1 text-xs text-gray-600 dark:text-gray-300">
-          Page {page + 1} of {pageCount}
+          Page {page + 1}
+          {pageCount != null && ` of ${pageCount}`}
         </span>
         <button
           type="button"
           className={BUTTON_CLASS}
-          disabled={page + 1 >= pageCount}
+          disabled={!hasNext}
           onClick={() => onPageChange(page + 1)}
         >
           Next ›
@@ -94,8 +106,8 @@ export function GridPagination({
         <button
           type="button"
           className={BUTTON_CLASS}
-          disabled={page + 1 >= pageCount}
-          onClick={() => onPageChange(pageCount - 1)}
+          disabled={pageCount == null || page + 1 >= pageCount}
+          onClick={() => pageCount != null && onPageChange(pageCount - 1)}
         >
           Last »
         </button>

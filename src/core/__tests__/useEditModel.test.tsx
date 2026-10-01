@@ -15,9 +15,10 @@ const row: Row = { id: 1, name: 'Ada' };
 function render(
   onCommit: (draft: Row, original: Row) => Promise<RowCommitResult> | RowCommitResult = () => ({
     ok: true,
-  })
+  }),
+  onSaved?: (row: Row) => void
 ) {
-  return renderHook(() => useEditModel<Row>(onCommit));
+  return renderHook(() => useEditModel<Row>(onCommit, onSaved));
 }
 
 describe('opening and closing', () => {
@@ -191,7 +192,58 @@ describe('commit', () => {
   });
 });
 
+describe("the server's canonical row", () => {
+  it('is handed to onSaved when a commit returns one', async () => {
+    const onSaved = vi.fn();
+    const { result } = render(
+      (draft) => ({ ok: true, row: { ...draft, name: 'Canonical' } }),
+      onSaved
+    );
+    act(() => result.current.start(1, row));
+    await act(async () => {
+      await result.current.commit();
+    });
+    expect(onSaved).toHaveBeenCalledWith({ ...row, name: 'Canonical' });
+  });
+
+  it('is not reported when the commit returns no row', async () => {
+    const onSaved = vi.fn();
+    const { result } = render(() => ({ ok: true }), onSaved);
+    act(() => result.current.start(1, row));
+    await act(async () => {
+      await result.current.commit();
+    });
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+});
+
 describe('rejected commits', () => {
+  it("records the rejection's message under __row__", async () => {
+    const { result } = render(() => ({
+      ok: false,
+      errors: { name: 'Name is taken' },
+      message: 'Fix the highlighted fields',
+    }));
+    act(() => result.current.start(1, row));
+    await act(async () => {
+      await result.current.commit();
+    });
+    expect(result.current.edit?.errors).toEqual({
+      name: 'Name is taken',
+      __row__: 'Fix the highlighted fields',
+    });
+  });
+
+  it('clears an error keyed by column id when that column is edited', async () => {
+    const { result } = render(() => ({ ok: false, errors: { fullName: 'Too short' } }));
+    act(() => result.current.start(1, row));
+    await act(async () => {
+      await result.current.commit();
+    });
+    act(() => result.current.setField('name', 'Grace', 'fullName'));
+    expect(result.current.edit?.errors).toEqual({});
+  });
+
   it('keeps the row open and paints the per-field errors', async () => {
     const { result } = render(() => ({
       ok: false,

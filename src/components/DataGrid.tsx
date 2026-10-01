@@ -23,7 +23,7 @@ import { useColumnState } from '../core/useColumnState';
 import { useEditModel } from '../core/useEditModel';
 import { useGridState } from '../core/useGridState';
 import { useSelectionModel, type RowId } from '../core/useSelectionModel';
-import { useServerDataSource } from '../core/useServerDataSource';
+import { fetchAllRows, useServerDataSource } from '../core/useServerDataSource';
 import { useVirtualRows } from '../core/useVirtualRows';
 import { copyToClipboard, downloadCsv, toCsv, toTsv } from '../core/exporters';
 import { withFilter } from '../core/filterModel';
@@ -140,7 +140,9 @@ export interface DataGridProps<T, C = unknown> {
 
   /**
    * Rendered into the toolbar strip above the header, left of the built-in
-   * Columns and Export CSV buttons.
+   * Columns and Export CSV buttons. The built-in Export CSV exports the
+   * selection when there is one, otherwise every matching row, up to 1000;
+   * see {@link GridApi.exportCsv}.
    *
    * @param api - The live imperative API.
    */
@@ -276,6 +278,10 @@ export function DataGrid<T, C = unknown>({
   );
   const [page, setPage] = useState(0);
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  // One export at a time: a new one cancels whatever is still fetching.
+  const exportAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => exportAbortRef.current?.abort(), []);
 
   /* ---------------------------------------------------------------------- */
   /* Measurement                                                            */
@@ -325,10 +331,17 @@ export function DataGrid<T, C = unknown>({
   // A page that no longer exists (filter narrowed the result set) would show an
   // empty grid forever, so walk back to the last real page.
   useEffect(() => {
-    if (isLoading || totalRows === 0) return;
+    if (isLoading) return;
+    // With an unknown total, an empty page past the first means we stepped
+    // off the end: go back one.
+    if (totalRows < 0) {
+      if (rows.length === 0 && page > 0) setPage(page - 1);
+      return;
+    }
+    if (totalRows === 0) return;
     const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
     if (page > pageCount - 1) setPage(pageCount - 1);
-  }, [totalRows, pageSize, page, isLoading]);
+  }, [totalRows, rows.length, pageSize, page, isLoading]);
 
   const virtual = useVirtualRows({ rowCount: rows.length, rowHeight });
 
@@ -344,7 +357,13 @@ export function DataGrid<T, C = unknown>({
   const selection = useSelectionModel<T>(rows, getRowId, onSelectionChanged);
 
   const noopCommit = useCallback((): RowCommitResult => ({ ok: true }), []);
-  const editing = useEditModel<T>(onRowCommit ?? noopCommit);
+  // The server's canonical copy from a successful commit replaces the row in
+  // place, through the same path as api.updateRows.
+  const onRowSaved = useCallback(
+    (row: T) => patchRows([row], latest.current.getRowId),
+    [patchRows]
+  );
+  const editing = useEditModel<T>(onRowCommit ?? noopCommit, onRowSaved);
 
   /* ---------------------------------------------------------------------- */
   /* Query mutations                                                        */
@@ -389,6 +408,19 @@ export function DataGrid<T, C = unknown>({
     [sortModel, applySort]
   );
 
+  // The header only sees visible columns, laid out in pinned bands, so its
+  // positions are not indices into the full order. Resolve the drop target's
+  // own position instead.
+  const { moveColumn } = columnState;
+  const columnOrder = columnState.state.order;
+  const onHeaderMove = useCallback(
+    (colId: string, targetColId: string) => {
+      const toIndex = columnOrder.indexOf(targetColId);
+      if (toIndex !== -1) moveColumn(colId, toIndex);
+    },
+    [columnOrder, moveColumn]
+  );
+
   const onFilterChange = useCallback(
     (colId: string, filter: HxFilterModel | null) => {
       applyFilters(withFilter(filterModel, colId, filter));
@@ -419,6 +451,8 @@ export function DataGrid<T, C = unknown>({
     sortModel,
     editing,
     getRowId,
+    dataSource,
+    onError,
   });
   latest.current = {
     rows,
@@ -428,6 +462,8 @@ export function DataGrid<T, C = unknown>({
     sortModel,
     editing,
     getRowId,
+    dataSource,
+    onError,
   };
 
   const api = useMemo<GridApi<T>>(
@@ -438,15 +474,39 @@ export function DataGrid<T, C = unknown>({
       getSelectedIds: () => [...latest.current.selection.selectedIds],
       clearSelection: () => latest.current.selection.clear(),
       selectAll: () => latest.current.selection.selectAllVisible(),
-      exportCsv: (options?: ExportCsvOptions) => {
-        const source = options?.onlySelected
-          ? latest.current.selection.getSelectedRows()
-          : latest.current.rows;
-        const csv = toCsv(
-          source,
-          latest.current.columnState.visibleColumns as never,
-          options?.separator ?? ','
-        );
+      exportCsv: async (options?: ExportCsvOptions) => {
+        const scope = options?.scope ?? (options?.onlySelected ? 'selected' : 'all');
+        // Snapshot now, so the file matches what was on screen when asked.
+        const { sortModel, filterModel, selection, getRowId, columnState } =
+          latest.current;
+        const columns = columnState.visibleColumns;
+
+        let source: T[];
+        if (scope === 'page') {
+          source = latest.current.rows;
+        } else {
+          exportAbortRef.current?.abort();
+          const controller = new AbortController();
+          exportAbortRef.current = controller;
+          const selectedIds = new Set(selection.selectedIds);
+          try {
+            const fetched = await fetchAllRows(latest.current.dataSource, {
+              sortModel,
+              filterModel,
+              maxRows: options?.maxRows,
+              chunkSize: options?.chunkSize,
+              signal: controller.signal,
+            });
+            source =
+              scope === 'selected'
+                ? fetched.filter((row) => selectedIds.has(getRowId(row)))
+                : fetched;
+          } finally {
+            if (exportAbortRef.current === controller) exportAbortRef.current = null;
+          }
+        }
+
+        const csv = toCsv(source, columns as never, options?.separator ?? ',');
         downloadCsv(csv, options?.fileName ?? exportFileName);
       },
       copySelectionToClipboard: async () => {
@@ -512,6 +572,23 @@ export function DataGrid<T, C = unknown>({
   const { startIndex, endIndex } = virtual.window;
   const visibleRows = rows.slice(startIndex, endIndex);
 
+  // The built-in button: the selection when there is one, else every
+  // matching row. Failures go to onError rather than out of a click handler.
+  const onExportClick = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      await api.exportCsv({
+        scope: latest.current.selection.selectedIds.size > 0 ? 'selected' : 'all',
+      });
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        latest.current.onError?.(error);
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  }, [api]);
+
   const showEmpty = !isLoading && !error && rows.length === 0;
 
   return (
@@ -530,10 +607,11 @@ export function DataGrid<T, C = unknown>({
             </button>
             <button
               type="button"
-              className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-white/5"
-              onClick={() => api.exportCsv()}
+              className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-wait disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-white/5"
+              disabled={isExporting}
+              onClick={onExportClick}
             >
-              Export CSV
+              {isExporting ? 'Exporting…' : 'Export CSV'}
             </button>
           </div>
       </div>
@@ -576,7 +654,7 @@ export function DataGrid<T, C = unknown>({
             onSort={onSort}
             onFilterChange={onFilterChange}
             onResize={columnState.setWidth}
-            onMove={columnState.moveColumn}
+            onMove={onHeaderMove}
             onPin={columnState.setPinned}
           />
 
@@ -676,6 +754,7 @@ export function DataGrid<T, C = unknown>({
         page={page}
         pageSize={pageSize}
         totalRows={totalRows}
+        pageRowCount={rows.length}
         pageSizeOptions={pageSizeOptions}
         isLoading={isLoading}
         onPageChange={setPage}

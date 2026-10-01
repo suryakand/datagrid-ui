@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   DataGrid,
+  type ExportCsvOptions,
   type GridApi,
   type HxRowsRequest,
   type RowCommitResult,
@@ -86,7 +87,7 @@ export function MarketExample() {
       {banner && <Banner onDismiss={() => setBanner(null)}>{banner}</Banner>}
       {selectedCount > 0 && (
         <p className="text-xs text-brand-600 dark:text-brand-400">
-          {selectedCount} selected — the toolbar's Export CSV honours the selection.
+          {selectedCount} selected — Export CSV writes exactly these rows, from every page.
         </p>
       )}
 
@@ -131,12 +132,49 @@ export function MarketExample() {
             <button type="button" onClick={() => api.setFilterModel({})} className={TOOLBAR_BUTTON}>
               Clear filters
             </button>
+            {/* The built-in Export CSV fetches every matching row (up to
+                1000); these narrow or widen that. */}
+            <ExportButtons api={api} onError={setBanner} />
           </>
         )}
       />
     </div>
   );
 }
+
+// #region export
+function ExportButtons({
+  api,
+  onError,
+}: {
+  api: GridApi<Stock>;
+  onError: (message: string) => void;
+}) {
+  const run = (options: ExportCsvOptions) =>
+    api.exportCsv(options).catch((error: unknown) => {
+      // A newer export cancelling this one is not a failure.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      onError(error instanceof Error ? error.message : 'Export failed');
+    });
+
+  return (
+    <>
+      {/* Only the rows loaded for this page; no request is made. */}
+      <button type="button" onClick={() => run({ scope: 'page' })} className={TOOLBAR_BUTTON}>
+        Export page
+      </button>
+      {/* Past the default cap of 1000, fetched 250 rows per request. */}
+      <button
+        type="button"
+        onClick={() => run({ scope: 'all', maxRows: 5000, chunkSize: 250, fileName: 'stocks-full' })}
+        className={TOOLBAR_BUTTON}
+      >
+        Export up to 5000
+      </button>
+    </>
+  );
+}
+// #endregion
 
 const TOOLBAR_BUTTON =
   'rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 ' +

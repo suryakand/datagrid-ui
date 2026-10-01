@@ -36,6 +36,27 @@ export async function fetchStocks(
   return response.json();
 }
 
+/**
+ * The same request against a backend that does not count its results: the
+ * response carries `lastRow: -1`, and the grid pages without a total.
+ */
+export async function fetchStocksUncounted(
+  request: HxRowsRequest,
+  signal: AbortSignal
+): Promise<HxRowsResponse<Stock>> {
+  const response = await fetch(`${BASE}/stocks?total=none`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Market API responded ${response.status}`);
+  }
+  return response.json();
+}
+
 /** Saves one inline edit. Field errors come back keyed by column. */
 export async function saveStock(
   symbol: string,

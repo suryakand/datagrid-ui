@@ -682,9 +682,16 @@ export type RowCommitResult =
   | {
       /** Discriminant: the row was rejected and stays open. */
       ok: false;
-      /** Messages keyed by column id, painted onto the offending cells. */
+      /**
+       * Messages keyed by column id, painted onto the offending cells. A key
+       * matching the column's `field` is accepted too, for columns whose id
+       * differs from their field.
+       */
       errors: Record<string, string>;
-      /** A single message for the whole row. */
+      /**
+       * A single message for the whole row, shown in the row's error banner
+       * alongside any per-cell messages.
+       */
       message?: string;
     };
 
@@ -736,13 +743,45 @@ export interface PersistedGridState {
 /* Imperative API                                                             */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Which rows {@link GridApi.exportCsv} writes.
+ *
+ * - `'all'` — every row matching the current sort and filters, fetched from
+ *   the data source up to {@link ExportCsvOptions.maxRows}.
+ * - `'page'` — only the rows loaded for the current page. No request is made.
+ * - `'selected'` — the selected rows across every page: the matching rows are
+ *   fetched as for `'all'` and kept when their id is selected. A selected row
+ *   that no longer matches the filters, or lies past `maxRows`, is left out.
+ */
+export type ExportScope = 'all' | 'page' | 'selected';
+
 /** Options for {@link GridApi.exportCsv}. */
 export interface ExportCsvOptions {
   /**
-   * Export only the selected rows rather than the whole loaded page.
+   * Which rows to export. See {@link ExportScope}.
+   * @defaultValue 'all'
+   */
+  scope?: ExportScope;
+  /**
+   * Export only the selected rows.
    * @defaultValue false
+   * @deprecated Use `scope: 'selected'`, which also covers rows selected on
+   * other pages.
    */
   onlySelected?: boolean;
+  /**
+   * Most rows fetched for the `'all'` and `'selected'` scopes. The server is
+   * never asked for rows past this. Raise it deliberately: every row is held
+   * in memory to build the file.
+   * @defaultValue 1000
+   */
+  maxRows?: number;
+  /**
+   * Rows asked for per request while fetching for the `'all'` and
+   * `'selected'` scopes.
+   * @defaultValue 1000
+   */
+  chunkSize?: number;
   /**
    * File name, with or without the `.csv` suffix.
    * @defaultValue the grid's `exportFileName` prop
@@ -770,7 +809,7 @@ export interface ExportCsvOptions {
  * <DataGrid
  *   apiRef={apiRef}
  *   toolbar={(api) => (
- *     <button onClick={() => api.exportCsv({ onlySelected: true })}>
+ *     <button onClick={() => api.exportCsv({ scope: 'selected' })}>
  *       Export selection
  *     </button>
  *   )}
@@ -782,8 +821,9 @@ export interface GridApi<T> {
   /**
    * Re-fetch the current page.
    *
-   * @param options - `purge: true` drops every cached block first, so nothing
-   * stale can survive; otherwise cached neighbouring pages are kept.
+   * @param options - By default every cached block is dropped first, so
+   * nothing stale can survive. Pass `purge: false` to keep the cached
+   * neighbouring pages and re-fetch only the current one.
    */
   refresh(options?: { purge?: boolean }): void;
   /** The rows currently loaded for this page, in display order. */
@@ -796,9 +836,24 @@ export interface GridApi<T> {
   clearSelection(): void;
   /** Select every row on the current page. */
   selectAll(): void;
-  /** Download the rows as CSV, honouring each column's `exportValue`. */
-  exportCsv(options?: ExportCsvOptions): void;
-  /** Copy the selection to the clipboard as TSV, which spreadsheets expect. */
+  /**
+   * Download rows as CSV, honouring each column's `exportValue` and
+   * `suppressExport`, with the visible columns in display order.
+   *
+   * By default every row matching the current sort and filters is fetched
+   * from the data source — up to 1000 — not just the loaded page. Starting
+   * another export cancels one still fetching.
+   *
+   * @param options - Scope, row cap, file name and separator.
+   * @returns Resolves once the download has been triggered. Rejects if a
+   * fetch fails, or with an `AbortError` when a newer export cancels it.
+   */
+  exportCsv(options?: ExportCsvOptions): Promise<void>;
+  /**
+   * Copy the selected rows on the current page to the clipboard as TSV, which
+   * spreadsheets expect — or the whole loaded page when nothing on it is
+   * selected. Unlike {@link GridApi.exportCsv} this never fetches.
+   */
   copySelectionToClipboard(): Promise<void>;
   /** The active filters. */
   getFilterModel(): FilterModelMap;

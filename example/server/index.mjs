@@ -278,6 +278,15 @@ const server = createServer(async (req, res) => {
 
     if (LATENCY_MS > 0) await new Promise((r) => setTimeout(r, LATENCY_MS));
 
+    // #region unknown-total
+    // Some backends cannot afford a COUNT(*) on every page — a cursor over a
+    // huge table, a federated search. `?total=none` plays that backend:
+    // it still pages, but reports the total as unknown with `lastRow: -1`.
+    if (url.searchParams.get('total') === 'none') {
+      return json(res, 200, { rows: page, lastRow: -1 });
+    }
+    // #endregion
+
     // `lastRow` is the total across all pages — it is what drives the grid's
     // pager, not the length of this slice.
     return json(res, 200, { rows: page, lastRow: filtered.length });
@@ -313,7 +322,12 @@ const server = createServer(async (req, res) => {
     }
 
     if (patch.rating !== undefined) row.rating = patch.rating;
-    if (patch.notes !== undefined) row.notes = String(patch.notes);
+    // #region normalise-notes
+    // The server owns the canonical form of a note: trimmed, with runs of
+    // whitespace collapsed. The grid shows this copy, not the typed draft,
+    // because the client returns it as `{ ok: true, row }`.
+    if (patch.notes !== undefined) row.notes = String(patch.notes).trim().replace(/\s+/g, ' ');
+    // #endregion
     if (patch.onWatchlist !== undefined) row.onWatchlist = Boolean(patch.onWatchlist);
     if (patch.analyst !== undefined) row.analyst = String(patch.analyst);
 

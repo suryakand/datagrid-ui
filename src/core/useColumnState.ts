@@ -269,12 +269,18 @@ export function useColumnState<T, C>(
 
   const setWidth = useCallback(
     (colId: string, width: number) => {
+      const column = byId.get(colId);
+      let clamped = width;
+      if (column) {
+        if (column.maxWidth) clamped = Math.min(clamped, column.maxWidth);
+        clamped = Math.max(clamped, column.minWidth);
+      }
       update((current) => ({
         ...current,
-        widths: { ...current.widths, [colId]: Math.round(width) },
+        widths: { ...current.widths, [colId]: Math.round(clamped) },
       }));
     },
-    [update]
+    [update, byId]
   );
 
   const setPinned = useCallback(

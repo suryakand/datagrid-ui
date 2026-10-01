@@ -377,14 +377,30 @@ describe('resizing', () => {
     expect(onResize).toHaveBeenCalledWith('name', 100);
   });
 
-  it('floors the width at 40px however far left the pointer goes', () => {
+  it('floors the width at the default minWidth however far left the pointer goes', () => {
     const { onResize } = setup();
     const handle = handleFor('Name');
 
     fireEvent.pointerDown(handle, { clientX: 150, pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: -500, pointerId: 1 });
 
-    expect(onResize).toHaveBeenLastCalledWith('name', 40);
+    expect(onResize).toHaveBeenLastCalledWith('name', 60);
+  });
+
+  it("clamps to the column's own minWidth and maxWidth", () => {
+    const { onResize } = setup({
+      definitions: [
+        { field: 'name', header: 'Name', width: 150, minWidth: 100, maxWidth: 220 },
+      ],
+    });
+    const handle = handleFor('Name');
+
+    fireEvent.pointerDown(handle, { clientX: 150, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 0, pointerId: 1 });
+    expect(onResize).toHaveBeenLastCalledWith('name', 100);
+
+    fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
+    expect(onResize).toHaveBeenLastCalledWith('name', 220);
   });
 
   it('ignores pointer moves that did not start on the handle', () => {
@@ -438,13 +454,13 @@ describe('drag to reorder', () => {
 
   const dataTransfer = () => ({ effectAllowed: '', setData: vi.fn(), getData: vi.fn() });
 
-  it('moves the dragged column to the drop target index', () => {
+  it('moves the dragged column to the drop target', () => {
     const { onMove } = setup();
 
     fireEvent.dragStart(headerFor('Age'), { dataTransfer: dataTransfer() });
     fireEvent.drop(headerFor('Name'), { dataTransfer: dataTransfer() });
 
-    expect(onMove).toHaveBeenCalledWith('age', 0);
+    expect(onMove).toHaveBeenCalledWith('age', 'name');
   });
 
   it('dims the column while it is being dragged', () => {

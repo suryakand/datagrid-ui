@@ -66,3 +66,16 @@ export const IconMenu = () => (
     <path d="M4 6h16M4 12h16M4 18h16" />
   </svg>
 );
+
+export const IconColumns = () => (
+  <svg {...base}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16M15 4v16" />
+  </svg>
+);
+
+export const IconInfinity = () => (
+  <svg {...base}>
+    <path d="M7.5 15.5C5.6 15.5 4 13.9 4 12s1.6-3.5 3.5-3.5C11 8.5 13 15.5 16.5 15.5c1.9 0 3.5-1.6 3.5-3.5s-1.6-3.5-3.5-3.5C13 8.5 11 15.5 7.5 15.5Z" />
+  </svg>
+);

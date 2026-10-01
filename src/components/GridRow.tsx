@@ -21,7 +21,7 @@ export interface GridRowProps<T, C> {
   errors: Record<string, string>;
   isSaving: boolean;
   onToggleSelect: (id: RowId, index: number, shiftKey: boolean) => void;
-  onFieldChange: (field: string, value: unknown) => void;
+  onFieldChange: (field: string, value: unknown, colId?: string) => void;
   onCommit: () => void;
   onCancel: () => void;
   onRowDoubleClick: (rowId: RowId, row: T) => void;

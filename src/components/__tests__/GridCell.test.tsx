@@ -249,7 +249,7 @@ describe('edit mode', () => {
     const { onFieldChange } = setup(editable, { isRowEditing: true, draft: row });
 
     await user.type(screen.getByRole('textbox'), 'X');
-    expect(onFieldChange).toHaveBeenLastCalledWith('name', 'AdaX');
+    expect(onFieldChange).toHaveBeenLastCalledWith('name', 'AdaX', 'name');
   });
 
   it('keys the change by colId when the column has no field', async () => {
@@ -260,7 +260,7 @@ describe('edit mode', () => {
     );
 
     await user.type(screen.getByRole('textbox'), '!');
-    expect(onFieldChange).toHaveBeenLastCalledWith('derived', 'v!');
+    expect(onFieldChange).toHaveBeenLastCalledWith('derived', 'v!', 'derived');
   });
 
   it('paints the error for its own field only', () => {
@@ -270,6 +270,26 @@ describe('edit mode', () => {
       errors: { name: 'Too short', email: 'Bad address' },
     });
     expect(screen.getByRole('textbox')).toHaveAttribute('title', 'Too short');
+  });
+
+  it('paints an error keyed by column id when the id differs from the field', () => {
+    setup(
+      { colId: 'fullName', field: 'name', header: 'Name', editable: true },
+      { isRowEditing: true, draft: row, errors: { fullName: 'Too short' } }
+    );
+    expect(screen.getByRole('textbox')).toHaveAttribute('title', 'Too short');
+  });
+
+  it('prefers the column-id key when both keys carry a message', () => {
+    setup(
+      { colId: 'fullName', field: 'name', header: 'Name', editable: true },
+      {
+        isRowEditing: true,
+        draft: row,
+        errors: { fullName: 'By id', name: 'By field' },
+      }
+    );
+    expect(screen.getByRole('textbox')).toHaveAttribute('title', 'By id');
   });
 
   it('autofocuses only the first editable column', () => {

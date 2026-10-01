@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useServerDataSource } from '../useServerDataSource';
+import { fetchAllRows, useServerDataSource } from '../useServerDataSource';
 import type { FilterModelMap, HxDataSource, SortModelItem } from '../../types';
 import { controllableDataSource, makePeople, stubDataSource, type Person } from '../../test/helpers';
 
@@ -439,5 +439,106 @@ describe('error handling', () => {
 
     await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
     expect(first).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetchAllRows', () => {
+  const query = { sortModel: [], filterModel: {} };
+  const ranges = (source: { requests: Array<{ startRow: number; endRow: number }> }) =>
+    source.requests.map(({ startRow, endRow }) => [startRow, endRow]);
+
+  it('chunks through the result set until lastRow', async () => {
+    const source = stubDataSource(makePeople(250));
+    const rows = await fetchAllRows(source, { ...query, chunkSize: 100 });
+
+    expect(rows).toHaveLength(250);
+    expect(ranges(source)).toEqual([
+      [0, 100],
+      [100, 200],
+      [200, 300],
+    ]);
+  });
+
+  it('sends the sort and filter with every request', async () => {
+    const source = stubDataSource(makePeople(30));
+    const sortModel: SortModelItem[] = [{ colId: 'age', sort: 'desc' }];
+    const filterModel: FilterModelMap = {
+      name: { filterType: 'text', type: 'contains', filter: 'a' },
+    };
+
+    await fetchAllRows(source, { sortModel, filterModel, chunkSize: 10 });
+
+    expect(source.requests).toHaveLength(3);
+    for (const request of source.requests) {
+      expect(request).toMatchObject({ sortModel, filterModel, rowGroupCols: [] });
+    }
+  });
+
+  it('caps the result at 1000 rows by default and never asks past it', async () => {
+    const source = stubDataSource(makePeople(2500));
+    const rows = await fetchAllRows(source, { ...query, chunkSize: 400 });
+
+    expect(rows).toHaveLength(1000);
+    expect(ranges(source)).toEqual([
+      [0, 400],
+      [400, 800],
+      [800, 1000],
+    ]);
+  });
+
+  it('honours an explicit maxRows', async () => {
+    const source = stubDataSource(makePeople(100));
+    expect(await fetchAllRows(source, { ...query, maxRows: 42 })).toHaveLength(42);
+  });
+
+  it('stops at the first empty page when the total is unknown', async () => {
+    const source = stubDataSource(makePeople(25), { lastRow: -1 });
+    const rows = await fetchAllRows(source, { ...query, chunkSize: 10 });
+
+    expect(rows).toHaveLength(25);
+    // A short page is not trusted to be the last: one more request confirms.
+    expect(ranges(source)).toEqual([
+      [0, 10],
+      [10, 20],
+      [20, 30],
+      [25, 35],
+    ]);
+  });
+
+  it('keeps going when the server returns fewer rows than asked for', async () => {
+    const people = makePeople(120);
+    const capped: HxDataSource<Person> & { requests: Array<{ startRow: number; endRow: number }> } = {
+      requests: [],
+      async getRows(request) {
+        this.requests.push(request);
+        // A server with its own page-size limit of 50.
+        const end = Math.min(request.endRow, request.startRow + 50);
+        return { rows: people.slice(request.startRow, end), lastRow: people.length };
+      },
+    };
+
+    const rows = await fetchAllRows(capped, query);
+
+    expect(rows).toHaveLength(120);
+    expect(ranges(capped)).toEqual([
+      [0, 1000],
+      [50, 1000],
+      [100, 1000],
+    ]);
+  });
+
+  it('passes the signal through and stops once it is aborted', async () => {
+    const controller = new AbortController();
+    const source = stubDataSource(makePeople(300));
+    vi.mocked(source.getRows).mockImplementationOnce(async (request) => {
+      controller.abort();
+      return { rows: makePeople(100), lastRow: 300, startRow: request.startRow } as never;
+    });
+
+    await expect(
+      fetchAllRows(source, { ...query, chunkSize: 100, signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(vi.mocked(source.getRows).mock.calls[0][1]).toBe(controller.signal);
+    expect(source.getRows).toHaveBeenCalledTimes(1);
   });
 });

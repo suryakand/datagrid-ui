@@ -34,9 +34,10 @@ export interface UseEditModelResult<T> {
   start: (rowId: RowId, row: T) => void;
   /**
    * Write one field into the draft. Accepts a dotted path, creating
-   * intermediate objects as needed.
+   * intermediate objects as needed. Clears the error keyed by `field`, and by
+   * `colId` when given, since server messages may be keyed by either.
    */
-  setField: (field: string, value: unknown) => void;
+  setField: (field: string, value: unknown, colId?: string) => void;
   /** Close without saving, discarding the draft. */
   cancel: () => void;
   /** Run the commit callback. Keeps the row open if it returns `ok: false`. */
@@ -64,7 +65,10 @@ function setPath<T>(row: T, path: string, value: unknown): T {
  *
  * @typeParam T - The row type.
  * @param onCommit - Owns validation and persistence. Return
- * `{ ok: false, errors }` to keep the row open with per-field messages.
+ * `{ ok: false, errors }` to keep the row open with per-field messages; a
+ * `message` is recorded under the `__row__` key.
+ * @param onSaved - Called with the server's canonical row when a commit
+ * returns `{ ok: true, row }`, so the caller can patch it into the page.
  * @returns The edit state and its mutators.
  *
  * @remarks
@@ -75,7 +79,8 @@ function setPath<T>(row: T, path: string, value: unknown): T {
  * @see {@link RowCommitResult}
  */
 export function useEditModel<T>(
-  onCommit: (draft: T, original: T) => Promise<RowCommitResult> | RowCommitResult
+  onCommit: (draft: T, original: T) => Promise<RowCommitResult> | RowCommitResult,
+  onSaved?: (row: T) => void
 ): UseEditModelResult<T> {
   const [edit, setEdit] = useState<EditState<T> | null>(null);
 
@@ -113,12 +118,13 @@ export function useEditModel<T>(
   );
 
   const setField = useCallback(
-    (field: string, value: unknown) => {
+    (field: string, value: unknown, colId?: string) => {
       patch((current) => {
         const errors = { ...current.errors };
         // Clear the error as soon as the field is touched; re-validation
         // happens on commit.
         delete errors[field];
+        if (colId) delete errors[colId];
         return { ...current, draft: setPath(current.draft, field, value), errors };
       });
     },
@@ -137,9 +143,13 @@ export function useEditModel<T>(
       const result = await onCommit(state.draft, state.original);
       if (result.ok) {
         apply(null);
+        if (result.row !== undefined) onSaved?.(result.row as T);
         return;
       }
-      patch((current) => ({ ...current, errors: result.errors, isSaving: false }));
+      const errors = result.message
+        ? { ...result.errors, __row__: result.message }
+        : result.errors;
+      patch((current) => ({ ...current, errors, isSaving: false }));
     } catch (error) {
       patch((current) => ({
         ...current,
@@ -151,7 +161,7 @@ export function useEditModel<T>(
         },
       }));
     }
-  }, [onCommit, apply, patch]);
+  }, [onCommit, onSaved, apply, patch]);
 
   return { edit, isEditing, start, setField, cancel, commit };
 }

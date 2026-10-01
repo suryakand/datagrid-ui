@@ -1,11 +1,12 @@
 import { createRef } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataGrid, type DataGridProps } from '../DataGrid';
 import { GRID_STATE_VERSION, type ColumnDef, type GridApi } from '../../types';
 import {
   controllableDataSource,
+  deferred,
   flushEffects,
   lastRequest,
   makePeople,
@@ -293,6 +294,23 @@ describe('filtering', () => {
 });
 
 describe('paging', () => {
+  it('pages through a result set whose total the server reports as unknown', async () => {
+    const { user } = await renderGrid({
+      dataSource: stubDataSource(makePeople(45), { lastRow: -1 }),
+    });
+
+    expect(screen.getByText('1-20 of many')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Last »' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Next ›' }));
+    await waitFor(() => expect(screen.getByText('21-40 of many')).toBeInTheDocument());
+
+    // A short page is the last one.
+    await user.click(screen.getByRole('button', { name: 'Next ›' }));
+    await waitFor(() => expect(screen.getByText('41-45 of many')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+  });
+
   it('requests the next window and updates the range summary', async () => {
     const { dataSource, user } = await renderGrid();
 
@@ -506,6 +524,31 @@ describe('inline editing', () => {
     await waitFor(() => expect(screen.getByText('Server unreachable')).toBeInTheDocument());
   });
 
+  it("replaces the row with the server's canonical copy from a successful commit", async () => {
+    const { user } = await renderGrid({
+      onRowCommit: (draft: Person) => ({ ok: true, row: { ...draft, name: 'Canonical' } }),
+    });
+
+    await user.dblClick(screen.getByText('Person 1'));
+    await user.type(screen.getByRole('textbox'), '!{Enter}');
+
+    await waitFor(() => expect(screen.getByText('Canonical')).toBeInTheDocument());
+    expect(screen.queryByText('Person 1!')).not.toBeInTheDocument();
+  });
+
+  it("shows a rejected commit's row message in the save bar", async () => {
+    const { user } = await renderGrid({
+      onRowCommit: () => ({ ok: false, errors: {}, message: 'Rejected by the server' }),
+    });
+
+    await user.dblClick(screen.getByText('Person 1'));
+    await user.type(screen.getByRole('textbox'), '{Enter}');
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Rejected by the server').length).toBeGreaterThan(0)
+    );
+  });
+
   it('disables Save while a commit is in flight', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -550,6 +593,33 @@ describe('the columns panel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close columns panel' }));
     expect(screen.queryByPlaceholderText('Search columns...')).not.toBeInTheDocument();
+  });
+});
+
+describe('dragging a header', () => {
+  const headerFor = (label: string) =>
+    screen.getAllByRole('columnheader').find((el) => el.textContent?.includes(label))!;
+  const dataTransfer = () => ({ effectAllowed: '', setData: vi.fn(), getData: vi.fn() });
+  const headerLabels = () =>
+    screen
+      .getAllByRole('columnheader')
+      .map((el) => el.textContent ?? '')
+      .filter((text) => /Name|Email|Age/.test(text))
+      .map((text) => text.match(/Name|Email|Age/)![0]);
+
+  it('lands beside the drop target even when a hidden column sits between them', async () => {
+    await renderGrid({
+      columns: [
+        { field: 'name', header: 'Name', width: 160 },
+        { field: 'email', header: 'Email', width: 200, hide: true },
+        { field: 'age', header: 'Age', width: 80 },
+      ],
+    });
+
+    fireEvent.dragStart(headerFor('Name'), { dataTransfer: dataTransfer() });
+    fireEvent.drop(headerFor('Age'), { dataTransfer: dataTransfer() });
+
+    await waitFor(() => expect(headerLabels()).toEqual(['Age', 'Name']));
   });
 });
 
@@ -760,20 +830,156 @@ describe('the imperative API', () => {
     );
   });
 
-  it('exportCsv downloads the visible columns of the loaded page', async () => {
+  /**
+   * Captures what `downloadCsv` would save. The file content is whatever is
+   * handed to `Blob`, so a stand-in class records it, and the anchor's click
+   * is swallowed so jsdom does not try to navigate.
+   */
+  function captureDownloads() {
+    const files: Array<{ name: string; lines: string[] }> = [];
     const anchor = document.createElement('a');
-    const click = vi.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    vi.spyOn(anchor, 'click').mockImplementation(() => {
+      files[files.length - 1].name = anchor.download;
+    });
     const createElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
       tag === 'a' ? anchor : createElement(tag)
     );
+    vi.stubGlobal(
+      'Blob',
+      class {
+        constructor(parts: string[]) {
+          const text = parts.join('').replace(/^\uFEFF/, '');
+          files.push({ name: '', lines: text.split('\r\n') });
+        }
+      }
+    );
+    return {
+      files,
+      /** Data lines of the last file, without the header. */
+      dataLines: () => files[files.length - 1].lines.slice(1),
+      restore: () => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+      },
+    };
+  }
 
-    const { api } = await withApi({ exportFileName: 'people' });
-    api.exportCsv();
+  it('exportCsv fetches and downloads every matching row, not just the page', async () => {
+    const { api, dataSource } = await withApi({ exportFileName: 'people' });
+    const downloads = captureDownloads();
 
-    expect(click).toHaveBeenCalledOnce();
-    expect(anchor.download).toBe('people.csv');
-    vi.restoreAllMocks();
+    await api.exportCsv();
+
+    expect(downloads.files[0].name).toBe('people.csv');
+    expect(downloads.files[0].lines[0]).toBe('Name,Email,Age');
+    expect(downloads.dataLines()).toHaveLength(75);
+    expect(lastRequest(dataSource)).toMatchObject({ startRow: 0, endRow: 1000 });
+    downloads.restore();
+  });
+
+  it('caps an export at 1000 rows by default', async () => {
+    const { api, dataSource } = await withApi({
+      dataSource: stubDataSource(makePeople(1500)),
+    });
+    const downloads = captureDownloads();
+
+    await api.exportCsv();
+
+    expect(downloads.dataLines()).toHaveLength(1000);
+    expect(dataSource.requests.every((request) => request.endRow <= 1000)).toBe(true);
+    downloads.restore();
+  });
+
+  it("sends the grid's current sort and filters with the export requests", async () => {
+    const { api, dataSource } = await withApi();
+    api.setSortModel([{ colId: 'age', sort: 'desc' }]);
+    await waitFor(() => expect(screen.getByRole('grid')).toHaveAttribute('aria-busy', 'false'));
+    const downloads = captureDownloads();
+
+    await api.exportCsv();
+
+    expect(lastRequest(dataSource).sortModel).toEqual([{ colId: 'age', sort: 'desc' }]);
+    downloads.restore();
+  });
+
+  it("scope: 'page' exports only the loaded page without fetching", async () => {
+    const { api, dataSource } = await withApi();
+    const before = dataSource.requests.length;
+    const downloads = captureDownloads();
+
+    await api.exportCsv({ scope: 'page' });
+
+    expect(downloads.dataLines()).toHaveLength(20);
+    expect(dataSource.requests).toHaveLength(before);
+    downloads.restore();
+  });
+
+  it("scope: 'selected' includes rows selected on another page", async () => {
+    const { api, user } = await withApi();
+    await user.click(within(dataRows()[0]).getByRole('checkbox'));
+
+    await user.click(screen.getByRole('button', { name: 'Next ›' }));
+    await waitFor(() => expect(screen.getByText('21-40 of 75')).toBeInTheDocument());
+    await flushEffects();
+    await user.click(within(dataRows()[0]).getByRole('checkbox'));
+
+    const downloads = captureDownloads();
+    await api.exportCsv({ scope: 'selected' });
+
+    expect(downloads.dataLines().map((line) => line.split(',')[0])).toEqual([
+      'Person 1',
+      'Person 21',
+    ]);
+    downloads.restore();
+  });
+
+  it('still honours the deprecated onlySelected flag', async () => {
+    const { api, user } = await withApi();
+    await user.click(within(dataRows()[1]).getByRole('checkbox'));
+    const downloads = captureDownloads();
+
+    await api.exportCsv({ onlySelected: true });
+
+    expect(downloads.dataLines()).toHaveLength(1);
+    downloads.restore();
+  });
+
+  it('the toolbar button shows progress, then exports every row', async () => {
+    const gate = deferred<void>();
+    const rows = makePeople(75);
+    const source = stubDataSource(rows);
+    const { user } = await renderGrid({ dataSource: source });
+    // Hold the export's request open so the in-flight state is observable.
+    const getRows = vi.mocked(source.getRows);
+    const original = getRows.getMockImplementation()!;
+    getRows.mockImplementation(async (request, signal) => {
+      await gate.promise;
+      return original(request, signal);
+    });
+    const downloads = captureDownloads();
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(screen.getByRole('button', { name: 'Exporting…' })).toBeDisabled();
+
+    gate.resolve(undefined);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled()
+    );
+    expect(downloads.dataLines()).toHaveLength(75);
+    downloads.restore();
+  });
+
+  it('the toolbar button reports a failed export through onError', async () => {
+    const onError = vi.fn();
+    const source = stubDataSource(makePeople(75));
+    const { user } = await renderGrid({ dataSource: source, onError });
+    vi.mocked(source.getRows).mockRejectedValueOnce(new Error('Export failed'));
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('Export failed')));
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
   });
 
   it('copySelectionToClipboard writes the loaded page as TSV', async () => {

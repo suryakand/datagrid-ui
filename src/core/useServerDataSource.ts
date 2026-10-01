@@ -53,14 +53,14 @@ export interface UseServerDataSourceResult<T> {
 }
 
 function buildRequest(
-  page: number,
-  pageSize: number,
+  startRow: number,
+  endRow: number,
   sortModel: SortModelItem[],
   filterModel: FilterModelMap
 ): HxRowsRequest {
   return {
-    startRow: page * pageSize,
-    endRow: page * pageSize + pageSize,
+    startRow,
+    endRow,
     sortModel,
     filterModel,
     // Sent empty for wire compatibility with grid endpoints that expect them.
@@ -70,6 +70,90 @@ function buildRequest(
     pivotMode: false,
     groupKeys: [],
   };
+}
+
+/**
+ * Options for {@link fetchAllRows}.
+ */
+export interface FetchAllRowsOptions {
+  /** Sorts to send with every request, primary first. */
+  sortModel: SortModelItem[];
+  /** Filters to send with every request, keyed by column id. */
+  filterModel: FilterModelMap;
+  /**
+   * Rows asked for per request. A server that returns fewer than asked is
+   * fine: the next request simply starts where that response ended.
+   * @defaultValue 1000
+   */
+  chunkSize?: number;
+  /**
+   * Upper bound on the rows returned. No request asks for rows past it, so it
+   * also bounds the load put on the server.
+   * @defaultValue 1000
+   */
+  maxRows?: number;
+  /** Cancels the remaining requests. Passed through to every `getRows` call. */
+  signal?: AbortSignal;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException('The export was aborted.', 'AbortError');
+  }
+}
+
+/**
+ * Fetches every row matching a sort and filter, beyond the one page the grid
+ * holds — which is how the grid's CSV export covers the whole result set.
+ *
+ * Requests are issued one after another, `chunkSize` rows at a time, and stop
+ * at whichever comes first: the server's `lastRow`, an empty response (for a
+ * server that reports `lastRow: -1`), or `maxRows`. The requests have the same
+ * wire shape as the grid's own paging requests.
+ *
+ * @typeParam T - The row type.
+ * @param dataSource - The same data source the grid pages through.
+ * @param options - The query, chunking and the row cap.
+ * @returns Up to `maxRows` rows, in server order.
+ * @throws Whatever `getRows` throws, including an `AbortError` when `signal`
+ * is aborted.
+ *
+ * @example
+ * ```ts
+ * const rows = await fetchAllRows(dataSource, {
+ *   sortModel: api.getSortModel(),
+ *   filterModel: api.getFilterModel(),
+ *   maxRows: 5000,
+ * });
+ * ```
+ */
+export async function fetchAllRows<T>(
+  dataSource: HxDataSource<T>,
+  { sortModel, filterModel, chunkSize = 1000, maxRows = 1000, signal }: FetchAllRowsOptions
+): Promise<T[]> {
+  const rows: T[] = [];
+  const step = Math.max(1, chunkSize);
+
+  while (rows.length < maxRows) {
+    throwIfAborted(signal);
+    const startRow = rows.length;
+    const endRow = Math.min(startRow + step, maxRows);
+    const response = await dataSource.getRows(
+      buildRequest(startRow, endRow, sortModel, filterModel),
+      signal ?? new AbortController().signal
+    );
+    throwIfAborted(signal);
+
+    // An empty response ends it however lastRow was reported; guarding on
+    // this also stops a misbehaving server from looping us forever.
+    if (response.rows.length === 0) break;
+    rows.push(...response.rows);
+
+    const lastRow = response.lastRow ?? -1;
+    if (lastRow >= 0 && rows.length >= lastRow) break;
+  }
+
+  return rows.length > maxRows ? rows.slice(0, maxRows) : rows;
 }
 
 /**
@@ -160,7 +244,7 @@ export function useServerDataSource<T>({
     setIsLoading(true);
     setError(null);
 
-    const request = buildRequest(page, pageSize, sortModel, filterModel);
+    const request = buildRequest(page * pageSize, (page + 1) * pageSize, sortModel, filterModel);
 
     dataSourceRef.current
       .getRows(request, controller.signal)

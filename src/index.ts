@@ -1,7 +1,7 @@
 /**
  * A dependency-free React data grid: virtualized rows, server-side paging,
- * sorting and filtering, inline row editing, multi-select, CSV and clipboard
- * export, and persisted column preferences.
+ * sorting and filtering, inline row editing, multi-select, CSV export of
+ * every matching row, clipboard copy, and persisted column preferences.
  *
  * React is the only runtime requirement. Styling is plain Tailwind utility
  * classes — there is no stylesheet to import and no theme engine to configure.
@@ -53,8 +53,8 @@
  * - {@link ColumnDef} — the main thing you write.
  * - {@link HxDataSource} — the server contract, wire-compatible with ag-grid's
  *   server-side row model.
- * - {@link GridApi} — the imperative handle, for refreshing, exporting and
- *   patching rows in place.
+ * - {@link GridApi} — the imperative handle, for refreshing, exporting every
+ *   matching row as CSV, and patching rows in place.
  *
  * ## Not in this version
  *
@@ -88,8 +88,9 @@ export { useGridState } from './core/useGridState';
 export type { UseGridStateResult } from './core/useGridState';
 export { useSelectionModel } from './core/useSelectionModel';
 export type { RowId, UseSelectionModelResult } from './core/useSelectionModel';
-export { useServerDataSource } from './core/useServerDataSource';
+export { useServerDataSource, fetchAllRows } from './core/useServerDataSource';
 export type {
+  FetchAllRowsOptions,
   UseServerDataSourceOptions,
   UseServerDataSourceResult,
 } from './core/useServerDataSource';
@@ -163,4 +164,5 @@ export type {
   PersistedGridState,
   GridApi,
   ExportCsvOptions,
+  ExportScope,
 } from './types';

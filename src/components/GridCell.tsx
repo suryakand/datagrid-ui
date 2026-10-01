@@ -13,7 +13,7 @@ export interface GridCellProps<T, C> {
   draft: T | null;
   errors: Record<string, string>;
   isFirstEditable: boolean;
-  onFieldChange: (field: string, value: unknown) => void;
+  onFieldChange: (field: string, value: unknown, colId?: string) => void;
   onCommit: () => void;
   onCancel: () => void;
 }
@@ -69,7 +69,8 @@ function GridCellInner<T, C>({
 
   if (editing) {
     const field = column.field ?? column.colId;
-    const error = errors[field];
+    // Documented as keyed by column id; `field` is accepted as well.
+    const error = errors[column.colId] ?? errors[field];
     const editorValue = resolveValue(draft, column as never);
 
     const Editor =
@@ -91,7 +92,7 @@ function GridCellInner<T, C>({
           context={context}
           error={error}
           autoFocus={isFirstEditable}
-          onChange={(value: unknown) => onFieldChange(field, value)}
+          onChange={(value: unknown) => onFieldChange(field, value, column.colId)}
           onCommit={onCommit}
           onCancel={onCancel}
         />

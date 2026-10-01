@@ -109,3 +109,23 @@ describe('page size selector', () => {
     expect(onPageSizeChange).toHaveBeenCalledWith(50);
   });
 });
+
+describe('an unknown total', () => {
+  it('reads "of many" and hides the page count', () => {
+    setup({ page: 1, pageSize: 20, totalRows: -1, pageRowCount: 20 });
+    expect(screen.getByText('21-40 of many')).toBeInTheDocument();
+    expect(screen.getByText('Page 2')).toBeInTheDocument();
+  });
+
+  it('keeps Next enabled after a full page and disables Last', () => {
+    setup({ totalRows: -1, pageRowCount: 20 });
+    expect(screen.getByRole('button', { name: 'Next ›' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Last »' })).toBeDisabled();
+  });
+
+  it('treats a short page as the last one', () => {
+    setup({ page: 2, pageSize: 20, totalRows: -1, pageRowCount: 7 });
+    expect(screen.getByText('41-47 of many')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+  });
+});

@@ -69,11 +69,55 @@ export const MARKET_DOCS: DocSection[] = [
           That means validation does not have to be mirrored in the client. Here
           the API rejects a note containing <C>TODO</C> with a 422, the fetch
           wrapper turns that into a <C>ValidationError</C>, and the errors map
-          goes straight back to the grid.
+          goes straight back to the grid. Its <C>message</C> lands in the save
+          bar, above the per-cell messages.
         </p>
       </>
     ),
     snippet: { file: 'src/examples/market/MarketExample.tsx', region: 'row-commit' },
+  },
+  {
+    title: "The server's copy replaces the draft",
+    body: (
+      <>
+        <p>
+          On success the handler above returns the saved record as{' '}
+          <C>{'{ ok: true, row }'}</C>, and the grid swaps it in place of the
+          draft — so whatever the server normalised or filled in is what the
+          user sees, without a refetch.
+        </p>
+        <p>
+          This API trims a note and collapses runs of whitespace. Type a note
+          with extra spaces, press Enter, and watch them disappear: that is
+          the server's copy arriving, not anything the client did.
+        </p>
+      </>
+    ),
+    snippet: { file: 'server/index.mjs', region: 'normalise-notes' },
+  },
+  {
+    title: 'Exporting beyond the loaded page',
+    body: (
+      <>
+        <p>
+          The grid only ever holds one page, so the built-in <em>Export CSV</em>{' '}
+          does not serialise what is on screen. It asks the same{' '}
+          <C>dataSource</C> for every row matching the current sort and
+          filters — up to 1000 rows by default, never requesting past that —
+          and writes those. With rows selected it exports exactly the
+          selection, including rows selected on other pages.
+        </p>
+        <p>
+          <C>api.exportCsv()</C> takes the same choice as a <C>scope</C>:{' '}
+          <C>'all'</C>, <C>'selected'</C> or <C>'page'</C>, the last making no
+          request at all. <C>maxRows</C> raises the cap and <C>chunkSize</C>{' '}
+          sets how many rows each request asks for. Every row is held in
+          memory to build the file, so for exports in the hundreds of
+          thousands, a server-side download endpoint is the better tool.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/market/MarketExample.tsx', region: 'export' },
   },
   {
     title: 'Built-in editors',
@@ -261,5 +305,107 @@ export const THEMING_DOCS: DocSection[] = [
       </>
     ),
     snippet: { file: 'src/index.css', region: 'tailwind-source' },
+  },
+];
+
+export const LAYOUT_DOCS: DocSection[] = [
+  {
+    title: 'Resize limits a drag cannot cross',
+    body: (
+      <>
+        <p>
+          Drag the edge of the <C>Company</C> header. It stops at{' '}
+          <C>minWidth</C> and <C>maxWidth</C> however far the pointer travels,
+          and the width saved to storage is the clamped one. Without a{' '}
+          <C>minWidth</C> a column still bottoms out at 60px.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/layout/columns.tsx', region: 'size-limits' },
+  },
+  {
+    title: 'Hidden columns keep their place',
+    body: (
+      <>
+        <p>
+          <C>hide: true</C> starts a column hidden without removing it from the
+          order. Drag any header onto another and it lands where you dropped
+          it, even with hidden columns sitting between the two — then show{' '}
+          <C>Exchange</C> or <C>Volume</C> from the Columns panel and they
+          reappear in their own slots.
+        </p>
+        <p>
+          <C>Symbol</C> sets <C>lockPosition</C>, so it can neither be dragged
+          nor displaced.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/layout/columns.tsx', region: 'hidden-by-default' },
+  },
+  {
+    title: 'Pinned to either edge',
+    body: (
+      <>
+        <p>
+          <C>pinned: 'left'</C> and <C>pinned: 'right'</C> keep a column in
+          view while the middle scrolls horizontally. Users can re-pin from the
+          ⋮ menu in any header.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/layout/columns.tsx', region: 'pin-right' },
+  },
+  {
+    title: 'Saved layout and quick filters',
+    body: (
+      <>
+        <p>
+          With a <C>storageKey</C>, every width, move, hide and pin is written
+          to <C>localStorage</C> and restored on the next visit; the Columns
+          panel's <em>Reset to defaults</em> throws it away.
+        </p>
+        <p>
+          Text columns get a search box in the floating filter row. Once it
+          holds text, the <C>×</C> inside it clears that column's filter.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/layout/LayoutExample.tsx', region: 'layout-grid' },
+  },
+];
+
+export const OPEN_ENDED_DOCS: DocSection[] = [
+  {
+    title: 'When the server cannot count',
+    body: (
+      <>
+        <p>
+          <C>lastRow</C> normally carries the total across all pages. When
+          counting is too expensive — a cursor over a very large table, a
+          federated search — return <C>-1</C> instead. The request and the
+          rest of the response are unchanged.
+        </p>
+      </>
+    ),
+    snippet: { file: 'server/index.mjs', region: 'unknown-total' },
+  },
+  {
+    title: 'What the pager does without a total',
+    body: (
+      <>
+        <p>
+          The range reads <em>of many</em> and the page number has no{' '}
+          <em>of N</em>. <C>Next</C> stays enabled while pages come back full;
+          a short page is taken as the last one, and <C>Last</C> is always
+          disabled because there is no known end to jump to.
+        </p>
+        <p>
+          If the total happens to be an exact multiple of the page size, the
+          final page is full, so <C>Next</C> fetches one more page. It comes
+          back empty and the grid steps back to the last page with rows.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/open-ended/OpenEndedExample.tsx', region: 'uncounted-source' },
   },
 ];

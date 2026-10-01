@@ -25,7 +25,8 @@ export interface GridHeaderProps<T, C> {
   onSort: (colId: string, additive: boolean) => void;
   onFilterChange: (colId: string, filter: HxFilterModel | null) => void;
   onResize: (colId: string, width: number) => void;
-  onMove: (colId: string, toIndex: number) => void;
+  /** Move `colId` to where `targetColId` sits in the full column order. */
+  onMove: (colId: string, targetColId: string) => void;
   onPin: (colId: string, pinned: Pinned | undefined) => void;
 }
 
@@ -110,9 +111,13 @@ export function GridHeader<T, C>({
 
   // Resizing writes straight to the DOM-free state on each pointer move; the
   // pointer capture keeps the drag alive outside the header.
-  const resizeRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(
-    null
-  );
+  const resizeRef = useRef<{
+    colId: string;
+    startX: number;
+    startWidth: number;
+    minWidth: number;
+    maxWidth: number;
+  } | null>(null);
 
   const startResize = useCallback(
     (event: React.PointerEvent, item: ColumnLayoutItem<T, C>) => {
@@ -122,6 +127,8 @@ export function GridHeader<T, C>({
         colId: item.colId,
         startX: event.clientX,
         startWidth: item.width,
+        minWidth: item.column.minWidth,
+        maxWidth: item.column.maxWidth ?? Infinity,
       };
       (event.target as HTMLElement).setPointerCapture(event.pointerId);
     },
@@ -133,7 +140,8 @@ export function GridHeader<T, C>({
       const active = resizeRef.current;
       if (!active) return;
       const delta = event.clientX - active.startX;
-      onResize(active.colId, Math.max(40, active.startWidth + delta));
+      const width = Math.min(active.startWidth + delta, active.maxWidth);
+      onResize(active.colId, Math.max(width, active.minWidth));
     },
     [onResize]
   );
@@ -210,7 +218,7 @@ export function GridHeader<T, C>({
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (dragColId && dragColId !== column.colId) onMove(dragColId, index);
+              if (dragColId && dragColId !== column.colId) onMove(dragColId, column.colId);
               setDragColId(null);
             }}
             onDragEnd={() => setDragColId(null)}

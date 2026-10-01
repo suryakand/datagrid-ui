@@ -1,7 +1,8 @@
 # @helix-x/datagrid-ui
 
 A dependency-free React data grid: virtualized rows, server-side paging /
-sorting / filtering, inline row editing, multi-select, CSV + clipboard export
+sorting / filtering, inline row editing, multi-select, CSV export of every
+matching row (fetched from the server, up to 1000 by default), clipboard copy
 and persisted column preferences.
 
 Its only runtime requirement is React. Styling is plain Tailwind utility
@@ -18,13 +19,15 @@ npm install
 npm run dev
 ```
 
-Four examples, all against a real server-side backend:
+Six examples, all against a real server-side backend:
 
 | | |
 | --- | --- |
 | **Server-side market data** | 480 symbols; paging, sorting and all four filter kinds resolved on the server, plus inline editing with server-side validation |
 | **Images in rows** | company logos and analyst avatars, lazy-loaded with reserved boxes and error fallbacks |
 | **Live updates** | an SSE feed patched in with `api.updateRows()` — no refetch, no lost scroll position |
+| **Column layout** | resize limits, drag-to-reorder around hidden columns, pinning on both edges, all persisted under one `storageKey` |
+| **Paging without a total** | a backend that returns `lastRow: -1`; the pager reads "of many" and stops at the first short page |
 | **Theme customization** | accent, density and dark mode driven entirely by CSS custom properties |
 
 Each example sits behind a **Preview / Code** toggle — the running grid, or its

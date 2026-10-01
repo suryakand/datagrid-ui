@@ -179,6 +179,12 @@ describe('mutators', () => {
     expect(result.current.visibleColumns.find((c) => c.colId === 'age')?.width).toBe(60);
   });
 
+  it('clamps a resize down to maxWidth', () => {
+    const { result } = render([{ field: 'name', header: 'Name', width: 100, maxWidth: 180 }]);
+    act(() => result.current.setWidth('name', 500));
+    expect(result.current.state.widths.name).toBe(180);
+  });
+
   it('pins and unpins a column', () => {
     const { result } = render();
     act(() => result.current.setPinned('name', 'left'));

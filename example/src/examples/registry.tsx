@@ -1,11 +1,27 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { DocSection } from '../docs/DocSections';
-import { LIVE_DOCS, MARKET_DOCS, PORTFOLIO_DOCS, THEMING_DOCS } from './docs';
-import { IconImage, IconPalette, IconPulse, IconTable } from '../layout/icons';
+import {
+  LAYOUT_DOCS,
+  LIVE_DOCS,
+  MARKET_DOCS,
+  OPEN_ENDED_DOCS,
+  PORTFOLIO_DOCS,
+  THEMING_DOCS,
+} from './docs';
+import {
+  IconColumns,
+  IconImage,
+  IconInfinity,
+  IconPalette,
+  IconPulse,
+  IconTable,
+} from '../layout/icons';
 import { MarketExample } from './market/MarketExample';
 import { PortfolioExample } from './portfolio/PortfolioExample';
 import { LiveExample } from './live/LiveExample';
 import { ThemingExample } from './theming/ThemingExample';
+import { LayoutExample } from './layout/LayoutExample';
+import { OpenEndedExample } from './open-ended/OpenEndedExample';
 
 export interface Example {
   id: string;
@@ -95,6 +111,51 @@ export const EXAMPLES: Example[] = [
     sourceDir: 'src/examples/live',
     docs: LIVE_DOCS,
     Component: LiveExample,
+  },
+  {
+    id: 'layout',
+    title: 'Column layout',
+    blurb: 'Resize limits, reorder, hide, pin',
+    description: (
+      <>
+        Drag headers to reorder, resize against per-column limits, pin to
+        either edge and show hidden columns from the Columns panel. Every
+        change is saved under one{' '}
+        <code className="rounded bg-gray-100 px-1 font-mono text-[11px] dark:bg-white/10">storageKey</code>{' '}
+        and survives a reload.
+      </>
+    ),
+    icon: IconColumns,
+    tags: ['columns', 'resize', 'persistence'],
+    source: [
+      'src/examples/layout/LayoutExample.tsx',
+      'src/examples/layout/columns.tsx',
+    ],
+    sourceDir: 'src/examples/layout',
+    docs: LAYOUT_DOCS,
+    Component: LayoutExample,
+  },
+  {
+    id: 'open-ended',
+    title: 'Paging without a total',
+    blurb: 'lastRow: -1, "of many"',
+    description: (
+      <>
+        A backend that pages but never counts its results returns{' '}
+        <code className="rounded bg-gray-100 px-1 font-mono text-[11px] dark:bg-white/10">lastRow: -1</code>.
+        The pager keeps going while pages come back full and stops at the
+        first short one.
+      </>
+    ),
+    icon: IconInfinity,
+    tags: ['server-side', 'paging'],
+    source: [
+      'src/examples/open-ended/OpenEndedExample.tsx',
+      'server/index.mjs',
+    ],
+    sourceDir: 'src/examples/open-ended',
+    docs: OPEN_ENDED_DOCS,
+    Component: OpenEndedExample,
   },
   {
     id: 'theming',
