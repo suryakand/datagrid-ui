@@ -79,6 +79,10 @@ The grid holds one page at a time and never sorts or filters locally. `DataGrid`
 
 Every request carries an `AbortController` and a sequence number so a slow response for a superseded sort can never overwrite a newer one. The block cache is dropped wholesale when the query changes.
 
+### Per-row rules
+
+`isRowSelectable` narrows what `useSelectionModel` treats as "visible": toggles, shift-ranges, select-all and `allVisibleSelected` all consider selectable rows only, and `SelectionCell` draws a padlock for a rejected body row (the header keeps a disabled checkbox). Already-selected ids are not pruned when a row becomes unselectable. `getRowClassName` replaces the stripe in `GridRow` (editing and selected still win) and switches that row's pinned cells to `bg-inherit` via `GridCell`'s `inheritRowBackground` — rows without a class keep the opaque `bg-white` pinned cells, so other grids are unchanged.
+
 ### Two invariants that are easy to break
 
 1. **Column definitions must be static.** Anything volatile — in-flight ids, handlers, per-tick state — goes in the `context` prop, which reaches every `cellRenderer` without rebuilding a single definition. Putting volatile data in a column rebuilds all of them on every change.

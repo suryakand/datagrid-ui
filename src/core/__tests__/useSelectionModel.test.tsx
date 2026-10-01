@@ -187,3 +187,46 @@ describe('selection across pages', () => {
     expect(onSelectionChanged).toHaveBeenLastCalledWith([]);
   });
 });
+
+describe('isRowSelectable', () => {
+  // Ids 1..5; the even ones cannot be selected.
+  const oddOnly = (row: Person) => row.id % 2 === 1;
+
+  function renderWithPredicate(rows: Person[] = makePeople(5)) {
+    return renderHook(() => useSelectionModel<Person>(rows, getRowId, undefined, oddOnly));
+  }
+
+  it('ignores a toggle on a row that cannot be selected', () => {
+    const { result } = renderWithPredicate();
+
+    act(() => result.current.toggleRow(2, 1, false));
+    expect(result.current.isSelected(2)).toBe(false);
+  });
+
+  it('skips unselectable rows in a shift-range', () => {
+    const { result } = renderWithPredicate();
+
+    act(() => result.current.toggleRow(1, 0, false));
+    act(() => result.current.toggleRow(5, 4, true));
+    expect([...result.current.selectedIds].sort()).toEqual([1, 3, 5]);
+  });
+
+  it('selects only the selectable rows on select-all, and then reads as complete', () => {
+    const { result } = renderWithPredicate();
+
+    act(() => result.current.toggleAllVisible());
+    expect([...result.current.selectedIds].sort()).toEqual([1, 3, 5]);
+    expect(result.current.allVisibleSelected).toBe(true);
+
+    act(() => result.current.toggleAllVisible());
+    expect([...result.current.selectedIds]).toEqual([]);
+  });
+
+  it('reports when no loaded row can be selected', () => {
+    const { result } = renderHook(() =>
+      useSelectionModel<Person>(makePeople(3), getRowId, undefined, () => false)
+    );
+    expect(result.current.noneSelectable).toBe(true);
+    expect(result.current.allVisibleSelected).toBe(false);
+  });
+});

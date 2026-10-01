@@ -103,6 +103,27 @@ export interface DataGridProps<T, C = unknown> {
    * @defaultValue true
    */
   selectable?: boolean;
+  /**
+   * Which rows may be selected. A row it returns `false` for keeps its
+   * checkbox, greyed out and inert, and is skipped by shift-ranges, by the
+   * header's select-all and by {@link GridApi.selectAll}.
+   *
+   * An id selected while its row was selectable stays selected if the row later
+   * stops being so; call {@link GridApi.clearSelection} when that matters.
+   * @defaultValue every row
+   */
+  isRowSelectable?: (row: T) => boolean;
+  /**
+   * Classes for one row's background, by its data -- e.g. to tint rows by
+   * status. A non-empty result replaces the striping; the editing and selected
+   * colours still win, and so does hover.
+   *
+   * The colour must be **opaque**: the sticky selection and pinned cells paint
+   * the row's background, and a translucent one lets scrolled cells show
+   * through. As with `cellClassName`, the classes must be ones your Tailwind
+   * build can see.
+   */
+  getRowClassName?: (row: T) => string;
 
   /**
    * Rows per page before the user changes it. A persisted preference wins.
@@ -250,6 +271,8 @@ export function DataGrid<T, C = unknown>({
   headerHeight = 36,
   floatingFilter = true,
   selectable = true,
+  isRowSelectable,
+  getRowClassName,
   defaultPageSize = 20,
   pageSizeOptions = DEFAULT_PAGE_SIZES,
   onRowCommit,
@@ -341,7 +364,12 @@ export function DataGrid<T, C = unknown>({
   /* Selection and editing                                                  */
   /* ---------------------------------------------------------------------- */
 
-  const selection = useSelectionModel<T>(rows, getRowId, onSelectionChanged);
+  const selection = useSelectionModel<T>(
+    rows,
+    getRowId,
+    onSelectionChanged,
+    isRowSelectable
+  );
 
   const noopCommit = useCallback((): RowCommitResult => ({ ok: true }), []);
   const editing = useEditModel<T>(onRowCommit ?? noopCommit);
@@ -572,6 +600,7 @@ export function DataGrid<T, C = unknown>({
             selectable={selectable}
             allSelected={selection.allVisibleSelected}
             someSelected={selection.someVisibleSelected}
+            selectAllDisabled={selection.noneSelectable}
             onToggleAll={selection.toggleAllVisible}
             onSort={onSort}
             onFilterChange={onFilterChange}
@@ -621,6 +650,8 @@ export function DataGrid<T, C = unknown>({
                     api={api}
                     selectable={selectable}
                     isSelected={selection.isSelected(rowId)}
+                    isSelectable={isRowSelectable ? isRowSelectable(row) : true}
+                    rowClassName={getRowClassName?.(row)}
                     isRowEditing={isRowEditing}
                     draft={isRowEditing ? (editing.edit?.draft ?? null) : null}
                     errors={isRowEditing ? (editing.edit?.errors ?? {}) : {}}

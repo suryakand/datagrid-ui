@@ -16,6 +16,13 @@ export interface GridRowProps<T, C> {
   api: GridApi<T>;
   selectable: boolean;
   isSelected: boolean;
+  /** `false` greys out the row's checkbox. Selectable when omitted. */
+  isSelectable?: boolean;
+  /**
+   * A background for this row, from `getRowClassName`. Replaces the striping;
+   * the editing and selected colours still take precedence.
+   */
+  rowClassName?: string;
   isRowEditing: boolean;
   draft: T | null;
   errors: Record<string, string>;
@@ -40,6 +47,8 @@ function GridRowInner<T, C>({
   api,
   selectable,
   isSelected,
+  isSelectable = true,
+  rowClassName,
   isRowEditing,
   draft,
   errors,
@@ -69,7 +78,9 @@ function GridRowInner<T, C>({
     ? 'bg-brand-25 dark:bg-[color-mix(in_srgb,var(--color-brand-500)_10%,var(--color-gray-900))]'
     : isSelected
       ? 'bg-brand-50 dark:bg-[color-mix(in_srgb,var(--color-brand-500)_15%,var(--color-gray-900))]'
-      : rowIndex % 2 === 1
+      : rowClassName
+        ? rowClassName
+        : rowIndex % 2 === 1
         ? 'bg-[color-mix(in_srgb,var(--color-gray-50)_60%,var(--color-white))] dark:bg-[color-mix(in_srgb,var(--color-white)_2%,var(--color-gray-900))]'
         : 'bg-white dark:bg-gray-900';
 
@@ -115,6 +126,7 @@ function GridRowInner<T, C>({
       {selectable && (
         <SelectionCell
           checked={isSelected}
+          disabled={!isSelectable}
           onToggle={(shiftKey) => onToggleSelect(rowId, rowIndex, shiftKey)}
         />
       )}
@@ -131,6 +143,7 @@ function GridRowInner<T, C>({
           draft={draft}
           errors={errors}
           isFirstEditable={item.colId === firstEditableColId}
+          inheritRowBackground={Boolean(rowClassName)}
           onFieldChange={onFieldChange}
           onCommit={onCommit}
           onCancel={onCancel}

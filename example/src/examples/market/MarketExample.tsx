@@ -11,6 +11,21 @@ import { useTheme, DENSITY } from '../../theme';
 import type { Stock } from '../../types';
 import { columns, type GridContext } from './columns';
 
+/*
+ * Two rules decided per row, from its data. A SELL-rated stock cannot be
+ * selected -- its checkbox becomes a padlock, and shift-ranges and select-all
+ * step over it -- and it carries a background of its own in place of the
+ * stripe. The colour is opaque, as a row colour must be: the sticky checkbox
+ * and pinned cells paint the row's background.
+ */
+// #region row-rules
+const SELL_ROW =
+  'bg-error-50 dark:bg-[color-mix(in_srgb,var(--color-error-500)_12%,var(--color-gray-900))]';
+
+const isRowSelectable = (row: Stock) => row.rating !== 'SELL';
+const getRowClassName = (row: Stock) => (row.rating === 'SELL' ? SELL_ROW : '');
+// #endregion
+
 /**
  * The full server-side contract: paging, sorting, four filter kinds and
  * inline editing with server-side validation.
@@ -87,6 +102,7 @@ export function MarketExample() {
       {selectedCount > 0 && (
         <p className="text-xs text-brand-600 dark:text-brand-400">
           {selectedCount} selected — the toolbar's Export CSV honours the selection.
+          SELL-rated rows are locked and cannot be selected.
         </p>
       )}
 
@@ -103,6 +119,8 @@ export function MarketExample() {
         defaultPageSize={50}
         pageSizeOptions={[20, 50, 100, 200]}
         selectable
+        isRowSelectable={isRowSelectable}
+        getRowClassName={getRowClassName}
         floatingFilter
         exportFileName="stocks"
         onRowCommit={handleRowCommit}

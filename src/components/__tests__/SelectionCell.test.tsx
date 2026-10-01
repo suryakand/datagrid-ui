@@ -96,4 +96,16 @@ describe('SelectionCell', () => {
   it('exports the fixed width the header and rows both reserve', () => {
     expect(SELECTION_COLUMN_WIDTH).toBe(40);
   });
+
+  it('shows a padlock instead of a checkbox on a row that cannot be selected', () => {
+    render(<SelectionCell disabled checked={false} onToggle={() => undefined} />);
+    expect(screen.getByRole('img', { name: 'Row cannot be selected' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps a disabled checkbox in the header when no row can be selected', () => {
+    render(<SelectionCell isHeader disabled checked={false} onToggle={() => undefined} />);
+    expect(screen.getByRole('checkbox', { name: 'Select all rows' })).toBeDisabled();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
 });

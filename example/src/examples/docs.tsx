@@ -93,6 +93,35 @@ export const MARKET_DOCS: DocSection[] = [
     ),
     snippet: { file: 'src/examples/market/columns.tsx', region: 'editable-select' },
   },
+  {
+    title: 'Rows that cannot be selected, and rows with a colour of their own',
+    body: (
+      <>
+        <p>
+          <C>isRowSelectable</C> is a predicate over the row. A row it rejects
+          shows a padlock where its checkbox would be, and is stepped over by
+          shift-ranges, the header's select-all and <C>api.selectAll()</C> — so
+          an action over the selection never has to filter out rows it was
+          never meant to touch. Here a SELL-rated stock is locked; change a
+          row's rating to see it lock and unlock.
+        </p>
+        <p>
+          <C>getRowClassName</C> gives a row a background by its data. It takes
+          the stripe's place, while the editing, selected and hover colours
+          still win. Two rules: the colour must be <em>opaque</em>, because the
+          sticky checkbox and pinned cells paint the row's background and a
+          translucent one lets scrolled cells show through; and the classes come
+          from <em>your</em> source, so your Tailwind build already sees them.
+        </p>
+        <p>
+          An id selected while its row was selectable stays selected if the row
+          later stops being so. Call <C>api.clearSelection()</C> after the
+          change that locks rows if that matters.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/market/MarketExample.tsx', region: 'row-rules' },
+  },
 ];
 
 export const PORTFOLIO_DOCS: DocSection[] = [

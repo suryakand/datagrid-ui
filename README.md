@@ -1,8 +1,9 @@
 # @helix-x/datagrid-ui
 
 A dependency-free React data grid: virtualized rows, server-side paging /
-sorting / filtering, inline row editing, multi-select, CSV + clipboard export
-and persisted column preferences.
+sorting / filtering, inline row editing, multi-select with per-row locking,
+per-row background colours, CSV + clipboard export and persisted column
+preferences.
 
 Its only runtime requirement is React. Styling is plain Tailwind utility
 classes, so there is no CSS file to import and no theme engine to configure.
@@ -61,7 +62,8 @@ point it at the shipped bundle explicitly:
 
 On Tailwind v3, add the same path to `content` in `tailwind.config.js`, and
 define the four colour variables below as well. Row backgrounds (stripe,
-selection, editing, hover) are opaque colours mixed at runtime from
+selection, editing, hover, and anything you return from `getRowClassName`,
+which takes the stripe's place) are opaque colours mixed at runtime from
 `var(--color-…)`, so the sticky checkbox column never shows the cells scrolling
 underneath it. v4 emits those variables for you; v3 emits none, and without
 them rows render with no background at all:
@@ -129,6 +131,30 @@ const columns: ColumnDef<Person, Ctx>[] = [
   apiRef={apiRef}
 />
 ```
+
+### Locking and colouring rows
+
+Two optional props decide things per row, from its data:
+
+```tsx
+<DataGrid
+  // ...
+  isRowSelectable={(row) => row.status !== 'CLOSED'}
+  getRowClassName={(row) => (row.status === 'CLOSED' ? 'bg-gray-100 dark:bg-gray-800' : '')}
+/>
+```
+
+- **`isRowSelectable`** — a row it returns `false` for shows a padlock in place
+  of its checkbox and is skipped by shift-ranges, the header's select-all and
+  `api.selectAll()`. The header checkbox is disabled when no loaded row can be
+  selected. An id selected while its row was selectable stays selected if the
+  row later stops being so; call `api.clearSelection()` when that matters.
+- **`getRowClassName`** — a background for the row. A non-empty result replaces
+  the stripe; the editing, selected and hover colours still win, and pinned
+  cells take the row's colour. The colour must be **opaque**: the sticky
+  checkbox and pinned cells paint the row's background, and a translucent one
+  lets scrolled cells show through. The classes live in your source, so your
+  Tailwind build sees them without any extra `@source`.
 
 ### Server contract
 
