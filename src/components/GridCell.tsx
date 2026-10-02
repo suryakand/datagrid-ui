@@ -14,6 +14,11 @@ export interface GridCellProps<T, C> {
   errors: Record<string, string>;
   isFirstEditable: boolean;
   onFieldChange: (field: string, value: unknown, colId?: string) => void;
+  /**
+   * The row carries a colour of its own (`getRowClassName`), so a pinned cell
+   * takes it from the row instead of painting the grid's surface over it.
+   */
+  inheritRowBackground?: boolean;
   onCommit: () => void;
   onCancel: () => void;
 }
@@ -34,6 +39,7 @@ function GridCellInner<T, C>({
   draft,
   errors,
   isFirstEditable,
+  inheritRowBackground,
   onFieldChange,
   onCommit,
   onCancel,
@@ -59,7 +65,7 @@ function GridCellInner<T, C>({
   const base =
     'flex h-full items-center gap-1 border-r border-gray-200 px-2 text-xs ' +
     'text-gray-700 dark:border-gray-700 dark:text-gray-200 ' +
-    (pinned ? 'bg-white dark:bg-gray-900 ' : '');
+    (pinned ? (inheritRowBackground ? 'bg-inherit ' : 'bg-white dark:bg-gray-900 ') : '');
 
   const alignment = ALIGN_CLASS[column.align ?? 'left'];
 

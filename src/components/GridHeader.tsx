@@ -21,6 +21,8 @@ export interface GridHeaderProps<T, C> {
   selectable: boolean;
   allSelected: boolean;
   someSelected: boolean;
+  /** No loaded row can be selected, so select-all has nothing to do. */
+  selectAllDisabled?: boolean;
   onToggleAll: () => void;
   onSort: (colId: string, additive: boolean) => void;
   onFilterChange: (colId: string, filter: HxFilterModel | null) => void;
@@ -98,6 +100,7 @@ export function GridHeader<T, C>({
   selectable,
   allSelected,
   someSelected,
+  selectAllDisabled,
   onToggleAll,
   onSort,
   onFilterChange,
@@ -169,6 +172,7 @@ export function GridHeader<T, C>({
           isHeader
           checked={allSelected}
           indeterminate={someSelected}
+          disabled={selectAllDisabled}
           onToggle={onToggleAll}
           label="Select all rows on this page"
         />

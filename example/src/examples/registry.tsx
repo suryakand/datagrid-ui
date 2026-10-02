@@ -50,12 +50,13 @@ export const EXAMPLES: Example[] = [
       <>
         480 symbols with every page, sort and filter resolved on the server. Four
         filter kinds, inline editing with server-side validation, CSV export and
-        persisted column layout. Try typing <code className="rounded bg-gray-100 px-1 font-mono text-[11px] dark:bg-white/10">TODO</code>{' '}
+        persisted column layout. SELL-rated rows are locked against selection
+        and tinted. Try typing <code className="rounded bg-gray-100 px-1 font-mono text-[11px] dark:bg-white/10">TODO</code>{' '}
         into a note to see a rejected commit.
       </>
     ),
     icon: IconTable,
-    tags: ['server-side', 'filters', 'editing'],
+    tags: ['server-side', 'filters', 'editing', 'row rules'],
     source: [
       'src/examples/market/MarketExample.tsx',
       'src/examples/market/columns.tsx',

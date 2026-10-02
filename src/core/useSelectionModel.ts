@@ -17,10 +17,12 @@ export interface UseSelectionModelResult<T> {
   selectedIds: Set<RowId>;
   /** Whether one id is selected. */
   isSelected: (id: RowId) => boolean;
-  /** True when every row currently on screen is selected. */
+  /** True when every selectable row currently on screen is selected. */
   allVisibleSelected: boolean;
   /** True when some, but not all, visible rows are selected. */
   someVisibleSelected: boolean;
+  /** True when rows are loaded and `isRowSelectable` rejects every one. */
+  noneSelectable: boolean;
   /**
    * Toggle one row.
    * @param id - The row to toggle.
@@ -49,12 +51,15 @@ export interface UseSelectionModelResult<T> {
  * @param rows - The currently loaded page.
  * @param getRowId - Stable identity for a row.
  * @param onSelectionChanged - Called with every selected id after each change.
+ * @param isRowSelectable - Rows it returns `false` for cannot be toggled, and
+ *   are skipped by shift-ranges and by select-all. Every row when omitted.
  * @returns The selection state and its mutators.
  */
 export function useSelectionModel<T>(
   rows: T[],
   getRowId: (row: T) => RowId,
-  onSelectionChanged?: (ids: RowId[]) => void
+  onSelectionChanged?: (ids: RowId[]) => void,
+  isRowSelectable?: (row: T) => boolean
 ): UseSelectionModelResult<T> {
   const [selectedIds, setSelectedIds] = useState<Set<RowId>>(() => new Set());
   const lastToggledIndexRef = useRef<number | null>(null);
@@ -63,6 +68,8 @@ export function useSelectionModel<T>(
   rowsRef.current = rows;
   const getRowIdRef = useRef(getRowId);
   getRowIdRef.current = getRowId;
+  const isRowSelectableRef = useRef(isRowSelectable);
+  isRowSelectableRef.current = isRowSelectable;
 
   const commit = useCallback(
     (next: Set<RowId>) => {
@@ -74,7 +81,13 @@ export function useSelectionModel<T>(
 
   const isSelected = useCallback((id: RowId) => selectedIds.has(id), [selectedIds]);
 
-  const visibleIds = useMemo(() => rows.map(getRowId), [rows, getRowId]);
+  // "Visible" means visible and selectable throughout: a row that cannot be
+  // selected must not keep select-all from ever reading as complete.
+  const visibleIds = useMemo(
+    () => (isRowSelectable ? rows.filter(isRowSelectable) : rows).map(getRowId),
+    [rows, getRowId, isRowSelectable]
+  );
+  const noneSelectable = rows.length > 0 && visibleIds.length === 0;
 
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
@@ -83,6 +96,10 @@ export function useSelectionModel<T>(
 
   const toggleRow = useCallback(
     (id: RowId, index: number, shiftKey: boolean) => {
+      const canSelect = (row: T | undefined) =>
+        row != null && isRowSelectableRef.current?.(row) !== false;
+      if (!canSelect(rowsRef.current[index])) return;
+
       const next = new Set(selectedIds);
       const anchor = lastToggledIndexRef.current;
 
@@ -91,6 +108,7 @@ export function useSelectionModel<T>(
         const [from, to] = anchor < index ? [anchor, index] : [index, anchor];
         const shouldSelect = !next.has(id);
         for (let i = from; i <= to; i++) {
+          if (!canSelect(rowsRef.current[i])) continue;
           const rowId = getRowIdRef.current(rowsRef.current[i]);
           if (rowId == null) continue;
           if (shouldSelect) next.add(rowId);
@@ -140,6 +158,7 @@ export function useSelectionModel<T>(
     isSelected,
     allVisibleSelected,
     someVisibleSelected,
+    noneSelectable,
     toggleRow,
     toggleAllVisible,
     clear,
