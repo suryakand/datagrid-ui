@@ -145,9 +145,22 @@ When editing example source, keep regions wrapping **syntactically complete** co
 
 ## Release
 
+User-facing walkthrough: `RELEASING.md`. Keep it in sync when a workflow or `.github/scripts/publish.mjs` changes.
+
 Two workflows, deliberately separate:
 
-- `.github/workflows/publish.yml` — on push to `main`: typecheck, build, publish, tag `v<version>`, create the release, then commit the **next** version bump with `[skip ci]`. So `main` always carries the next unpublished version; a normal push publishes whatever is currently in `package.json`. Release notes come from `.github/scripts/release-notes.mjs` (commits since the previous `v*` tag, Conventional Commit prefixes grouped, `[skip ci]` bumps dropped) and are written **before** `npm publish`: once a version is on npm every later step is skipped on re-run, so anything that can fail belongs ahead of the publish where possible. Commit subjects become the published notes — write them for users.
+- `.github/workflows/publish.yml` — on push to `main`: typecheck, build, publish (see Registries below), tag `v<version>`, create the release, then commit the **next** version bump with `[skip ci]`. So `main` always carries the next unpublished version; a normal push publishes whatever is currently in `package.json`. Release notes come from `.github/scripts/release-notes.mjs` (commits since the previous `v*` tag, Conventional Commit prefixes grouped, `[skip ci]` bumps dropped) and are written **before** `npm publish`: once a version is on npm every later step is skipped on re-run, so anything that can fail belongs ahead of the publish where possible. Commit subjects become the published notes — write them for users.
 - `.github/workflows/docs.yml` — triggered by the publish workflow completing, via `workflow_run`. **Not `on: release`**: the publish job creates its release with the default `GITHUB_TOKEN`, and events raised by that token do not trigger further workflows, so an `on: release` trigger would never fire. It checks out the publish run's `head_sha` so docs describe the released code, not the bump commit.
 
-Requires an `NPM_TOKEN` secret, Actions write permission, and Pages source set to "GitHub Actions".
+### Registries
+
+`.github/scripts/publish.mjs` does the publishing, both in the workflow and locally (`npm run publish:npm | publish:custom | publish:both`, `publish:dry`, `publish:check`). The target is `npm` (npmjs.org), `custom` (the `CUSTOM_REGISTRY_URL` env var, e.g. `https://packages.allquill.com/repository/allquill-npm/`) or `both`. A push to `main` publishes to `both`, and a manual dispatch picks the `target` and can override the URL.
+
+- **Both registries always get the same version.** The script packs once and publishes that one tarball everywhere. A target that already has the version is skipped, so a re-run after a partial failure fills in only the registry that was missed. The tag/release steps tolerate an existing tag for the same reason.
+- **There is no fallback for the custom URL.** `custom`/`both` without `CUSTOM_REGISTRY_URL` fails before anything is published. Do not add a default.
+- npm prefers a scope's registry (`@helix-x:registry` in `.npmrc`) over `--registry`, so the script passes `--@helix-x:registry=<url>` too. Do not put `registry` back into `publishConfig`, because it would override the target.
+- **To retry a failed publish**, re-run the failed job or dispatch "Publish package" from `main`. The bump only happens after every target succeeds, so `main` still carries the failed version, and registries that already have it are skipped.
+- **To copy an already released version to another registry**, dispatch "Republish a released version" (`.github/workflows/republish.yml`, `--version <x>`; locally `npm run publish:copy -- 0.1.4 custom`). It downloads the released tarball from whichever registry has it and publishes it unchanged. Nothing is rebuilt and no tag, release or bump is made. A version on no known registry is an error.
+- Credentials come from env: `NPM_TOKEN` (npmjs `_authToken`) and `CUSTOM_REGISTRY_AUTH` (base64 `user:password`, `_auth`). Each one is referenced as `${VAR}` in a throwaway userconfig. When one is unset locally, `~/.npmrc` is used. In CI a missing one fails up front.
+
+Requires `NPM_TOKEN` and `CUSTOM_REGISTRY_AUTH` secrets, a `CUSTOM_REGISTRY_URL` repository variable, Actions write permission, and Pages source set to "GitHub Actions".

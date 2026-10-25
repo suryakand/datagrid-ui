@@ -31,6 +31,12 @@
     "docs:watch": "typedoc --watch",
     "clean": "rm -rf dist docs",
     "prepack": "npm run clean && npm run build",
+    "publish:npm": "node .github/scripts/publish.mjs npm",
+    "publish:custom": "node .github/scripts/publish.mjs custom",
+    "publish:both": "node .github/scripts/publish.mjs both",
+    "publish:dry": "DRY_RUN=1 node .github/scripts/publish.mjs both",
+    "publish:check": "node .github/scripts/publish.mjs --check both",
+    "publish:copy": "node .github/scripts/publish.mjs --version",
     "registry:login": "npm config set --location=user //packages.allquill.com/repository/allquill-npm/:_auth \"${NPM_TOKEN:?set NPM_TOKEN to the base64 of user:password}\""
   },
   "keywords": [
@@ -75,7 +81,6 @@
   },
   "license": "ISC",
   "publishConfig": {
-    "access": "public",
-    "registry": "https://packages.allquill.com/repository/allquill-npm/"
+    "access": "public"
   }
 }

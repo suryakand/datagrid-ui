@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish package
 
 on:
   push:
@@ -10,6 +10,22 @@ on:
         type: choice
         default: patch
         options: [patch, minor, major]
+      target:
+        description: 'Where to publish: npmjs.org, the custom registry, or both (same version to each)'
+        type: choice
+        default: both
+        options: [both, npm, custom]
+      custom_registry:
+        description: 'Custom registry URL for this run (defaults to the CUSTOM_REGISTRY_URL repository variable)'
+        type: string
+        required: false
+
+# Pushes publish to both registries; the custom one is the CUSTOM_REGISTRY_URL
+# repository variable, with no built-in fallback, so a push fails (before
+# publishing anything) until it is set.
+env:
+  TARGET: ${{ inputs.target || 'both' }}
+  CUSTOM_REGISTRY_URL: ${{ inputs.custom_registry || vars.CUSTOM_REGISTRY_URL }}
 
 # One publish at a time: the job pushes a bump commit back to main, and a second
 # concurrent run would publish a version whose tag is already being created.
@@ -38,7 +54,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url: .github/scripts/publish.mjs writes per-registry
+          # credentials itself.
           cache: npm
 
       - name: Install dependencies
@@ -52,21 +69,19 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CUSTOM_REGISTRY_AUTH: ${{ secrets.CUSTOM_REGISTRY_AUTH }}
         run: |
-          name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-          # Re-running on a commit that was already released must not fail the
-          # build; npm rejects a duplicate version anyway.
-          if npm view "$name@$version" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::$name@$version is already on the registry, skipping publish."
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Writes published=true only when every target already has this
+          # version, so re-running on a released commit does not fail, and a run
+          # where one registry was missed still publishes to that one. Also
+          # fails here, before anything is published, when the custom registry
+          # URL is missing.
+          node .github/scripts/publish.mjs --check "$TARGET"
 
       # Written before publishing on purpose: once the version is on npm a re-run
       # skips every step below, so a failure here must stop the run while it can
@@ -78,11 +93,14 @@ jobs:
           node .github/scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
 
+      # Packs once and publishes that tarball to each target still missing the
+      # version, so both registries get the identical package.
       - name: Publish
         if: steps.version.outputs.published == 'false'
-        run: npm publish
+        run: node .github/scripts/publish.mjs "$TARGET"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CUSTOM_REGISTRY_AUTH: ${{ secrets.CUSTOM_REGISTRY_AUTH }}
 
       - name: Tag the release
         if: steps.version.outputs.published == 'false'
@@ -91,6 +109,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Already there when a previous run published to one registry and
+          # failed on the other.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::notice::$TAG already exists, not tagging again."
+            exit 0
+          fi
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
 
@@ -100,6 +124,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists."
+            exit 0
+          fi
           gh release create "$TAG" --title "$TAG" --verify-tag \
             --notes-file "$RUNNER_TEMP/release-notes.md"
 

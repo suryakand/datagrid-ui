@@ -8,7 +8,8 @@ name: API docs
 # not trigger further workflows. A `release` trigger would simply never fire.
 on:
   workflow_run:
-    workflows: ['Publish to npm']
+    # Must match publish.yml's `name:` exactly.
+    workflows: ['Publish package']
     types: [completed]
     branches: [main]
   workflow_dispatch:
