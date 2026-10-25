@@ -9,6 +9,12 @@ export interface GridRowProps<T, C> {
   row: T;
   rowId: RowId;
   rowIndex: number;
+  /**
+   * Where the row sits in the list the selection model ranges over. Differs
+   * from `rowIndex` only while grouped, where group lines sit in between.
+   * Defaults to `rowIndex`.
+   */
+  selectionIndex?: number;
   top: number;
   height: number;
   layout: ColumnLayout<T, C>;
@@ -40,6 +46,7 @@ function GridRowInner<T, C>({
   row,
   rowId,
   rowIndex,
+  selectionIndex = rowIndex,
   top,
   height,
   layout,
@@ -127,7 +134,7 @@ function GridRowInner<T, C>({
         <SelectionCell
           checked={isSelected}
           disabled={!isSelectable}
-          onToggle={(shiftKey) => onToggleSelect(rowId, rowIndex, shiftKey)}
+          onToggle={(shiftKey) => onToggleSelect(rowId, selectionIndex, shiftKey)}
         />
       )}
 

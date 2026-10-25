@@ -1,6 +1,6 @@
 {
   "name": "@helix-x/datagrid-ui",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Dependency-free React data grid: virtualized rows, server-side paging/sorting/filtering, inline editing, Tailwind-styled",
   "type": "module",
   "sideEffects": false,
@@ -30,7 +30,8 @@
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
     "clean": "rm -rf dist docs",
-    "prepack": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build",
+    "registry:login": "npm config set --location=user //packages.allquill.com/repository/allquill-npm/:_auth \"${NPM_TOKEN:?set NPM_TOKEN to the base64 of user:password}\""
   },
   "keywords": [
     "react",
@@ -74,6 +75,7 @@
   },
   "license": "ISC",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://packages.allquill.com/repository/allquill-npm/"
   }
 }

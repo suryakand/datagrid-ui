@@ -23,7 +23,28 @@ export interface GridCellProps<T, C> {
   onCancel: () => void;
 }
 
-const ALIGN_CLASS = {
+/**
+ * Width and, for a pinned column, the sticky offset of one body cell. Shared
+ * with the group rows so their cells line up with the ordinary ones.
+ */
+export function cellLayoutStyle<T, C>({
+  width,
+  pinned,
+  stickyOffset,
+}: ColumnLayoutItem<T, C>): React.CSSProperties {
+  return {
+    width,
+    minWidth: width,
+    maxWidth: width,
+    ...(pinned === 'left'
+      ? { position: 'sticky', left: stickyOffset, zIndex: 2 }
+      : pinned === 'right'
+        ? { position: 'sticky', right: stickyOffset, zIndex: 2 }
+        : null),
+  };
+}
+
+export const ALIGN_CLASS = {
   left: 'justify-start text-left',
   center: 'justify-center text-center',
   right: 'justify-end text-right',
@@ -44,18 +65,8 @@ function GridCellInner<T, C>({
   onCommit,
   onCancel,
 }: GridCellProps<T, C>) {
-  const { column, width, pinned, stickyOffset } = item;
-
-  const style: React.CSSProperties = {
-    width,
-    minWidth: width,
-    maxWidth: width,
-    ...(pinned === 'left'
-      ? { position: 'sticky', left: stickyOffset, zIndex: 2 }
-      : pinned === 'right'
-        ? { position: 'sticky', right: stickyOffset, zIndex: 2 }
-        : null),
-  };
+  const { column, pinned } = item;
+  const style = cellLayoutStyle(item);
 
   const custom =
     typeof column.cellClassName === 'function'

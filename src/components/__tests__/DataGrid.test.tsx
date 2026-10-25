@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataGrid, type DataGridProps } from '../DataGrid';
@@ -8,6 +8,7 @@ import {
   controllableDataSource,
   deferred,
   flushEffects,
+  groupedDataSource,
   lastRequest,
   makePeople,
   resizeViewport,
@@ -1124,5 +1125,160 @@ describe('scrolling', () => {
     });
     const spacer = container.querySelector('.relative > .relative') as HTMLElement;
     expect(spacer).toHaveStyle({ height: '3600px' });
+  });
+});
+
+describe('row grouping', () => {
+  const groupColumns: ColumnDef<Person>[] = [
+    { field: 'name', header: 'Name', width: 160 },
+    { field: 'active', header: 'Active', width: 100, enableRowGroup: true },
+    { field: 'age', header: 'Age', width: 80, aggFunc: 'sum' },
+    { field: 'email', header: 'Email', width: 200, enableRowGroup: false },
+  ];
+
+  const renderGrouped = (overrides: GridOverrides = {}) =>
+    renderGrid({
+      columns: groupColumns,
+      dataSource: groupedDataSource(makePeople(6)),
+      ...overrides,
+    });
+
+  it('sends empty grouping fields while ungrouped', async () => {
+    const { dataSource } = await renderGrouped();
+    expect(lastRequest(dataSource)).toMatchObject({ rowGroupCols: [], valueCols: [], groupKeys: [] });
+  });
+
+  it('asks for group rows with the group column and the aggregates', async () => {
+    const { dataSource } = await renderGrouped({ defaultRowGroupColId: 'active' });
+
+    expect(lastRequest(dataSource)).toMatchObject({
+      rowGroupCols: [{ id: 'active', field: 'active', displayName: 'Active' }],
+      valueCols: [{ id: 'age', field: 'age', aggFunc: 'sum' }],
+      groupKeys: [],
+    });
+    // Odd ids are inactive: 1, 3, 5 come first. Booleans format as No / Yes.
+    expect(rowTexts()).toEqual(['▸No(3)', '▸Yes(3)']);
+    expect(screen.getByRole('button', { name: 'Expand Active: No' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand Active: Yes' })).toBeInTheDocument();
+    expect(screen.getByText('1-2 of 2')).toBeInTheDocument();
+  });
+
+  it('renders the aggregate through the column and leaves other cells blank', async () => {
+    await renderGrouped({ defaultRowGroupColId: 'active' });
+    const [first] = dataRows();
+    const cells = within(first).getAllByRole('gridcell');
+    // 1, 3, 5 -> ages 21 + 23 + 25
+    expect(cells[2]).toHaveTextContent('69');
+    expect(cells[3]).toHaveTextContent('');
+  });
+
+  it('expands a group into its rows, fetched with groupKeys', async () => {
+    const { dataSource, user } = await renderGrouped({ defaultRowGroupColId: 'active' });
+
+    await user.click(screen.getByRole('button', { name: 'Expand Active: No' }));
+    await waitFor(() => expect(screen.getByText('Person 1')).toBeInTheDocument());
+
+    expect(lastRequest(dataSource)).toMatchObject({ groupKeys: ['false'], startRow: 0 });
+    expect(screen.getByText('Person 5')).toBeInTheDocument();
+    expect(screen.queryByText('Person 2')).not.toBeInTheDocument();
+  });
+
+  it('never lets a group row be selected, and selects the leaves under it', async () => {
+    const { user } = await renderGrouped({ defaultRowGroupColId: 'active' });
+    expect(screen.queryAllByRole('checkbox', { name: 'Select row' })).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Expand Active: No' }));
+    await waitFor(() => expect(screen.getByText('Person 1')).toBeInTheDocument());
+
+    expect(screen.getAllByRole('checkbox', { name: 'Select row' })).toHaveLength(3);
+    await user.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }));
+    expect(screen.getAllByRole('checkbox', { name: 'Select row' }).every((box) => (box as HTMLInputElement).checked)).toBe(true);
+  });
+
+  it('groups from the header menu only for columns that allow it', async () => {
+    const { dataSource, user } = await renderGrouped();
+
+    await user.click(screen.getByRole('button', { name: 'Options for email' }));
+    expect(screen.queryByRole('button', { name: 'Group by this column' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Options for active' }));
+    await user.click(screen.getByRole('button', { name: 'Group by this column' }));
+
+    await waitFor(() => expect(lastRequest(dataSource).rowGroupCols).toHaveLength(1));
+    expect(await screen.findByText('Grouped by')).toBeInTheDocument();
+  });
+
+  it('ungroups from the chip and calls onRowGroupColIdChange', async () => {
+    const onRowGroupColIdChange = vi.fn();
+    const { dataSource, user } = await renderGrouped({
+      defaultRowGroupColId: 'active',
+      onRowGroupColIdChange,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Remove grouping' }));
+
+    expect(onRowGroupColIdChange).toHaveBeenCalledWith(null);
+    await waitFor(() => expect(screen.getByText('Person 1')).toBeInTheDocument());
+    expect(lastRequest(dataSource).rowGroupCols).toEqual([]);
+  });
+
+  it('ignores a grouping on a column without enableRowGroup', async () => {
+    const { dataSource } = await renderGrouped({ defaultRowGroupColId: 'email' });
+    expect(lastRequest(dataSource).rowGroupCols).toEqual([]);
+    expect(screen.queryByText('Grouped by')).not.toBeInTheDocument();
+  });
+
+  it('under a controlled rowGroupColId, only asks the owner', async () => {
+    const onRowGroupColIdChange = vi.fn();
+    const { dataSource, user } = await renderGrouped({
+      rowGroupColId: 'active',
+      onRowGroupColIdChange,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Remove grouping' }));
+
+    expect(onRowGroupColIdChange).toHaveBeenCalledWith(null);
+    await flushEffects();
+    expect(lastRequest(dataSource).rowGroupCols).toHaveLength(1);
+  });
+
+  it('persists the grouping, including an explicit ungroup', async () => {
+    const first = await renderGrouped({ storageKey: 'people', defaultRowGroupColId: 'active' });
+    await first.user.click(screen.getByRole('button', { name: 'Remove grouping' }));
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem('hxg:people') as string).rowGroup).toBeNull()
+    );
+    first.unmount();
+
+    const second = await renderGrouped({ storageKey: 'people', defaultRowGroupColId: 'active' });
+    expect(lastRequest(second.dataSource).rowGroupCols).toEqual([]);
+  });
+
+  it('exposes getRowGroup and setRowGroup on the api', async () => {
+    const apiRef = createRef<GridApi<Person>>();
+    const { dataSource } = await renderGrouped({ apiRef });
+
+    expect(apiRef.current?.getRowGroup()).toBeNull();
+    await act(async () => apiRef.current?.setRowGroup('active'));
+    await waitFor(() => expect(lastRequest(dataSource).rowGroupCols).toHaveLength(1));
+    expect(apiRef.current?.getRowGroup()).toBe('active');
+  });
+
+  it('exports rows, not groups, while grouped', async () => {
+    const apiRef = createRef<GridApi<Person>>();
+    const { dataSource } = await renderGrouped({ apiRef, defaultRowGroupColId: 'active' });
+    const anchor = document.createElement('a');
+    vi.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
+      tag === 'a' ? anchor : createElement(tag)
+    );
+
+    try {
+      await act(async () => apiRef.current?.exportCsv());
+      expect(lastRequest(dataSource)).toMatchObject({ rowGroupCols: [], groupKeys: [] });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

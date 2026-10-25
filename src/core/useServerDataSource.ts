@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FilterModelMap, HxDataSource, HxRowsRequest, SortModelItem } from '../types';
+import type {
+  FilterModelMap,
+  HxColumnVO,
+  HxDataSource,
+  HxRowsRequest,
+  SortModelItem,
+} from '../types';
+
+const NONE: HxColumnVO[] = [];
 
 /**
  * Options for {@link useServerDataSource}.
@@ -17,6 +25,18 @@ export interface UseServerDataSourceOptions<T> {
   sortModel: SortModelItem[];
   /** Active filters, keyed by column id. */
   filterModel: FilterModelMap;
+  /**
+   * The grouping column, sent as {@link HxRowsRequest.rowGroupCols}. When it
+   * holds an entry the rows fetched are group rows and `totalRows` counts
+   * groups.
+   * @defaultValue []
+   */
+  rowGroupCols?: HxColumnVO[];
+  /**
+   * Aggregates wanted on group rows, sent as {@link HxRowsRequest.valueCols}.
+   * @defaultValue []
+   */
+  valueCols?: HxColumnVO[];
   /**
    * Blocks to keep around so paging back and forth does not refetch.
    * @defaultValue 3
@@ -38,6 +58,13 @@ export interface UseServerDataSourceResult<T> {
   totalRows: number;
   /** True while a fetch is in flight. */
   isLoading: boolean;
+  /**
+   * True when `rows` still belong to an earlier query (another sort, filter,
+   * page size or grouping) because the current one has not answered yet. The
+   * grid uses it so that rows fetched ungrouped are never drawn as group rows,
+   * or the reverse.
+   */
+  isStale: boolean;
   /** The last error, or `null`. */
   error: unknown;
   /**
@@ -52,23 +79,27 @@ export interface UseServerDataSourceResult<T> {
   patchRows: (rows: T[], getRowId: (row: T) => string | number) => void;
 }
 
-function buildRequest(
+/** Builds the wire request. Internal: shared with the grouping hook. */
+export function buildRequest(
   startRow: number,
   endRow: number,
   sortModel: SortModelItem[],
-  filterModel: FilterModelMap
+  filterModel: FilterModelMap,
+  rowGroupCols: HxColumnVO[] = NONE,
+  valueCols: HxColumnVO[] = NONE,
+  groupKeys: string[] = []
 ): HxRowsRequest {
   return {
     startRow,
     endRow,
     sortModel,
     filterModel,
+    rowGroupCols,
+    valueCols,
     // Sent empty for wire compatibility with grid endpoints that expect them.
-    rowGroupCols: [],
-    valueCols: [],
     pivotCols: [],
     pivotMode: false,
-    groupKeys: [],
+    groupKeys,
   };
 }
 
@@ -109,7 +140,8 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
  * Requests are issued one after another, `chunkSize` rows at a time, and stop
  * at whichever comes first: the server's `lastRow`, an empty response (for a
  * server that reports `lastRow: -1`), or `maxRows`. The requests have the same
- * wire shape as the grid's own paging requests.
+ * wire shape as the grid's own paging requests, always ungrouped — so a
+ * grouped grid exports its rows, not its group summaries.
  *
  * @typeParam T - The row type.
  * @param dataSource - The same data source the grid pages through.
@@ -189,10 +221,14 @@ export function useServerDataSource<T>({
   page,
   sortModel,
   filterModel,
+  rowGroupCols = NONE,
+  valueCols = NONE,
   maxCachedBlocks = 3,
   onError,
 }: UseServerDataSourceOptions<T>): UseServerDataSourceResult<T> {
   const [rows, setRows] = useState<T[]>([]);
+  // The query `rows` were fetched for, so a caller can tell they are stale.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [totalRows, setTotalRows] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -207,8 +243,8 @@ export function useServerDataSource<T>({
   // The query identity. Serialising the models keeps the effect from re-firing
   // on every render just because the caller rebuilt an equal object.
   const queryKey = useMemo(
-    () => JSON.stringify({ pageSize, sortModel, filterModel }),
-    [pageSize, sortModel, filterModel]
+    () => JSON.stringify({ pageSize, sortModel, filterModel, rowGroupCols, valueCols }),
+    [pageSize, sortModel, filterModel, rowGroupCols, valueCols]
   );
 
   // Any change to the query invalidates every cached block.
@@ -231,6 +267,7 @@ export function useServerDataSource<T>({
     const cached = cacheRef.current.get(blockKey);
     if (cached) {
       setRows(cached.rows);
+      setLoadedKey(queryKey);
       setTotalRows(cached.lastRow);
       setError(null);
       return;
@@ -244,7 +281,14 @@ export function useServerDataSource<T>({
     setIsLoading(true);
     setError(null);
 
-    const request = buildRequest(page * pageSize, (page + 1) * pageSize, sortModel, filterModel);
+    const request = buildRequest(
+      page * pageSize,
+      (page + 1) * pageSize,
+      sortModel,
+      filterModel,
+      rowGroupCols,
+      valueCols
+    );
 
     dataSourceRef.current
       .getRows(request, controller.signal)
@@ -263,6 +307,7 @@ export function useServerDataSource<T>({
         }
 
         setRows(response.rows);
+        setLoadedKey(queryKey);
         setTotalRows(lastRow);
         setIsLoading(false);
       })
@@ -277,7 +322,17 @@ export function useServerDataSource<T>({
     return () => {
       controller.abort();
     };
-  }, [queryKey, page, pageSize, sortModel, filterModel, refreshToken, maxCachedBlocks]);
+  }, [
+    queryKey,
+    page,
+    pageSize,
+    sortModel,
+    filterModel,
+    rowGroupCols,
+    valueCols,
+    refreshToken,
+    maxCachedBlocks,
+  ]);
 
   const refresh = useCallback((options?: { purge?: boolean }) => {
     if (options?.purge !== false) cacheRef.current.clear();
@@ -310,5 +365,13 @@ export function useServerDataSource<T>({
     []
   );
 
-  return { rows, totalRows, isLoading, error, refresh, patchRows };
+  return {
+    rows,
+    totalRows,
+    isLoading,
+    isStale: loadedKey !== queryKey,
+    error,
+    refresh,
+    patchRows,
+  };
 }

@@ -109,6 +109,54 @@ export function stubDataSource<T>(
 }
 
 /**
+ * Serves `rows` the way a grouping server does: group rows for a grouped
+ * request without `groupKeys`, that group's rows (paged) for a request with
+ * them, and plain pages otherwise. Groups are by the requested `field`, in
+ * first-seen order, with `age` summed and `childCount` set.
+ */
+export function groupedDataSource(rows: Person[]): StubDataSource<Person> {
+  const requests: HxRowsRequest[] = [];
+
+  const getRows = vi.fn(async (request: HxRowsRequest): Promise<HxRowsResponse<Person>> => {
+    requests.push(request);
+    const [group] = request.rowGroupCols;
+    const field = group?.field as keyof Person | undefined;
+
+    if (!field) {
+      return { rows: rows.slice(request.startRow, request.endRow), lastRow: rows.length };
+    }
+
+    if (request.groupKeys.length === 0) {
+      const groups = new Map<string, Person[]>();
+      for (const row of rows) {
+        const key = String(row[field]);
+        groups.set(key, [...(groups.get(key) ?? []), row]);
+      }
+      const groupRows = [...groups.values()].map(
+        (members) =>
+          ({
+            [field]: members[0][field],
+            age: members.reduce((sum, member) => sum + member.age, 0),
+            childCount: members.length,
+          }) as unknown as Person
+      );
+      return {
+        rows: groupRows.slice(request.startRow, request.endRow),
+        lastRow: groupRows.length,
+      };
+    }
+
+    const members = rows.filter((row) => String(row[field]) === request.groupKeys[0]);
+    return {
+      rows: members.slice(request.startRow, request.endRow),
+      lastRow: members.length,
+    };
+  });
+
+  return { getRows, requests } as unknown as StubDataSource<Person>;
+}
+
+/**
  * The most recent request a stub received.
  *
  * A plain index rather than `Array.prototype.at`, which the library's ES2020

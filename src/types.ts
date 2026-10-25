@@ -226,21 +226,63 @@ export interface SortModelItem {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * An aggregation the server applies to a column's values within a group.
+ *
+ * Sent in {@link HxRowsRequest.valueCols} for every visible column with
+ * {@link ColumnDef.aggFunc}, only while the grid is grouped.
+ */
+export type HxAggFunc = 'sum' | 'min' | 'max' | 'avg' | 'count';
+
+/**
+ * A column as described to the server in {@link HxRowsRequest.rowGroupCols}
+ * and {@link HxRowsRequest.valueCols}. Same shape as ag-grid's `ColumnVO`.
+ */
+export interface HxColumnVO {
+  /** The column id ({@link ColumnDef.colId}). */
+  id: string;
+  /** Plain-text header, for servers that label their output. */
+  displayName: string;
+  /** The column's {@link ColumnDef.field}. Omitted for derived columns. */
+  field?: string;
+  /** The aggregation wanted. Present on `valueCols` entries only. */
+  aggFunc?: HxAggFunc;
+}
+
+/**
  * What the grid asks the server for: one page, with the active sort and
- * filters.
+ * filters — and, while the grid is grouped, which level of the grouping.
  *
  * Structurally compatible with ag-grid's `IServerSideGetRowsRequest`, so an
- * endpoint written for that model accepts this verbatim. The grouping and pivot
- * fields are always sent empty — this grid does not implement them — but they
- * are present so servers that destructure them do not fall over.
+ * endpoint written for that model accepts this verbatim. Pivoting is not
+ * implemented, so `pivotCols` and `pivotMode` are always empty and `false`.
+ *
+ * Grouping follows the same server-side row model contract, one level deep:
+ *
+ * - Not grouped: `rowGroupCols` and `groupKeys` are both empty. Return rows.
+ * - **Group level**: `rowGroupCols` has one entry and `groupKeys` is empty.
+ *   Return one row per group, carrying the group value under the group
+ *   column's `field`, each `valueCols` aggregate under that column's `field`,
+ *   and the group's row count as `childCount` (or wherever
+ *   {@link DataGridProps.getGroupChildCount} reads it). `lastRow` is the
+ *   number of groups.
+ * - **Inside a group**: `groupKeys` holds the expanded group's value as a
+ *   string. Return that group's rows, paged by `startRow`/`endRow`, exactly as
+ *   for an ungrouped request with an extra equality filter.
  *
  * @example Handling the request on the server
  * ```ts
  * app.post('/api/rows', (req, res) => {
- *   const { startRow, endRow, sortModel, filterModel } = req.body;
- *   const filtered = applyFilters(allRows, filterModel);
- *   const sorted   = applySort(filtered, sortModel);
- *   res.json({ rows: sorted.slice(startRow, endRow), lastRow: filtered.length });
+ *   const { startRow, endRow, sortModel, filterModel, rowGroupCols, groupKeys } = req.body;
+ *   let rows = applySort(applyFilters(allRows, filterModel), sortModel);
+ *
+ *   const [group] = rowGroupCols;
+ *   if (group && groupKeys.length === 0) {
+ *     const groups = groupBy(rows, group.field);   // [{ [field]: key, childCount, ...sums }]
+ *     return res.json({ rows: groups.slice(startRow, endRow), lastRow: groups.length });
+ *   }
+ *   if (group) rows = rows.filter((row) => String(row[group.field]) === groupKeys[0]);
+ *
+ *   res.json({ rows: rows.slice(startRow, endRow), lastRow: rows.length });
  * });
  * ```
  */
@@ -253,16 +295,25 @@ export interface HxRowsRequest {
   sortModel: SortModelItem[];
   /** Active filters, keyed by column id. Empty when unfiltered. */
   filterModel: FilterModelMap;
-  /** Always empty. Present only for ag-grid wire compatibility. */
-  rowGroupCols: never[];
-  /** Always empty. Present only for ag-grid wire compatibility. */
-  valueCols: never[];
+  /**
+   * The column the grid is grouped by: one entry while grouped, empty
+   * otherwise. Only one level is supported.
+   */
+  rowGroupCols: HxColumnVO[];
+  /**
+   * The columns to aggregate on group rows, each with its
+   * {@link HxColumnVO.aggFunc}. Empty when not grouped.
+   */
+  valueCols: HxColumnVO[];
   /** Always empty. Present only for ag-grid wire compatibility. */
   pivotCols: never[];
   /** Always `false`. Present only for ag-grid wire compatibility. */
   pivotMode: false;
-  /** Always empty. Present only for ag-grid wire compatibility. */
-  groupKeys: never[];
+  /**
+   * Empty for the group level; the expanded group's value, as a string, when
+   * asking for the rows inside it.
+   */
+  groupKeys: string[];
 }
 
 /**
@@ -581,6 +632,21 @@ export interface ColumnDef<T, C = unknown> {
    * @defaultValue 'left'
    */
   align?: 'left' | 'center' | 'right';
+
+  /**
+   * Offer "Group by this column" in the header menu. The grouping itself is
+   * done by the server: see {@link HxRowsRequest} for what it is asked.
+   * @defaultValue false
+   */
+  enableRowGroup?: boolean;
+  /**
+   * How the server should aggregate this column on group rows. The grid only
+   * asks; the server computes the value and returns it under this column's
+   * `field` on each group row, where it is rendered by the column's own
+   * `cellRenderer` or `valueFormatter`. Columns without it render blank on
+   * group rows.
+   */
+  aggFunc?: HxAggFunc;
 }
 
 /**
@@ -737,6 +803,11 @@ export interface PersistedGridState {
     /** Rows per page the user chose. */
     pageSize: number;
   };
+  /**
+   * The column id the user grouped by, or `null` when they ungrouped. Absent
+   * in state saved before grouping existed, which restores as "not set".
+   */
+  rowGroup?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -826,7 +897,10 @@ export interface GridApi<T> {
    * neighbouring pages and re-fetch only the current one.
    */
   refresh(options?: { purge?: boolean }): void;
-  /** The rows currently loaded for this page, in display order. */
+  /**
+   * The rows currently loaded for this page, in display order. While grouped,
+   * the rows loaded inside expanded groups — never the group rows themselves.
+   */
   getDisplayedRows(): T[];
   /** The selected rows that are on the current page. */
   getSelectedRows(): T[];
@@ -882,4 +956,14 @@ export interface GridApi<T> {
   startEditing(rowId: string | number): void;
   /** Close the editor, abandoning any uncommitted draft. */
   stopEditing(): void;
+  /** The column id the grid is grouped by, or `null` when it is not grouped. */
+  getRowGroup(): string | null;
+  /**
+   * Group by a column, or pass `null` to ungroup. Ignored for a column without
+   * {@link ColumnDef.enableRowGroup}. Returns to the first page and collapses
+   * every group. Under a controlled
+   * {@link DataGridProps.rowGroupColId | rowGroupColId} this only asks the
+   * owner, through `onRowGroupColIdChange`.
+   */
+  setRowGroup(colId: string | null): void;
 }

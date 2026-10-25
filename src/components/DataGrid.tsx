@@ -14,6 +14,7 @@ import type {
   ExportCsvOptions,
   FilterModelMap,
   GridApi,
+  HxColumnVO,
   HxDataSource,
   HxFilterModel,
   RowCommitResult,
@@ -22,17 +23,21 @@ import type {
 import { useColumnState } from '../core/useColumnState';
 import { useEditModel } from '../core/useEditModel';
 import { useGridState } from '../core/useGridState';
+import { useRowGrouping } from '../core/useRowGrouping';
 import { useSelectionModel, type RowId } from '../core/useSelectionModel';
 import { fetchAllRows, useServerDataSource } from '../core/useServerDataSource';
 import { useVirtualRows } from '../core/useVirtualRows';
 import { copyToClipboard, downloadCsv, toCsv, toTsv } from '../core/exporters';
 import { withFilter } from '../core/filterModel';
+import { headerText } from '../core/values';
 import { ColumnsPanel } from './ColumnsPanel';
 import { FloatingFilterRow } from './FloatingFilterRow';
 import { GridHeader } from './GridHeader';
 import { GridOverlay } from './GridOverlay';
 import { GridPagination } from './GridPagination';
 import { GridRow } from './GridRow';
+import { GroupRow, GroupStatusRow, groupLabel } from './GroupRow';
+import { SELECTION_COLUMN_WIDTH } from './SelectionCell';
 
 /**
  * Props for {@link DataGrid}.
@@ -192,6 +197,43 @@ export interface DataGridProps<T, C = unknown> {
    * callback ref.
    */
   apiRef?: Ref<GridApi<T>>;
+
+  /**
+   * The column id to group by, `null` for none — the controlled form. Leave it
+   * `undefined` to let the grid own the grouping (see
+   * {@link DataGridProps.defaultRowGroupColId}).
+   *
+   * Grouping is single-level and done by the server: the grid asks for group
+   * rows, then for one group's rows as it is opened. See {@link HxRowsRequest}
+   * for both requests. A column id that is unknown or lacks
+   * {@link ColumnDef.enableRowGroup} is treated as `null`. Controlled grouping
+   * is not persisted.
+   */
+  rowGroupColId?: string | null;
+  /**
+   * The grouping before the user changes it, when uncontrolled. A grouping
+   * persisted under {@link DataGridProps.storageKey} wins, including a
+   * persisted "ungrouped".
+   * @defaultValue null
+   */
+  defaultRowGroupColId?: string | null;
+  /**
+   * Called when the user groups or ungroups, from the header menu, the
+   * "Grouped by" chip, or {@link GridApi.setRowGroup}.
+   * @param colId - The new grouping column, or `null`.
+   */
+  onRowGroupColIdChange?: (colId: string | null) => void;
+  /**
+   * Reads how many rows a group row stands for, shown beside its value.
+   * Return `null` to show no count.
+   * @defaultValue the group row's numeric `childCount` field
+   */
+  getGroupChildCount?: (groupRow: T) => number | null | undefined;
+  /**
+   * Rows fetched each time a group is opened or its "Load more" is used.
+   * @defaultValue 100
+   */
+  groupChildBlockSize?: number;
 }
 
 const DEFAULT_PAGE_SIZES = [10, 20, 50, 100];
@@ -287,8 +329,19 @@ export function DataGrid<T, C = unknown>({
   className = '',
   height = '70vh',
   apiRef,
+  rowGroupColId: controlledRowGroup,
+  defaultRowGroupColId = null,
+  onRowGroupColIdChange,
+  getGroupChildCount,
+  groupChildBlockSize,
 }: DataGridProps<T, C>) {
   const persisted = useGridState(storageKey);
+
+  const [ownRowGroup, setOwnRowGroup] = useState<string | null>(() =>
+    persisted.initial?.rowGroup !== undefined
+      ? persisted.initial.rowGroup
+      : defaultRowGroupColId
+  );
 
   const [sortModel, setSortModel] = useState<SortModelItem[]>(
     () => persisted.initial?.sort ?? []
@@ -344,12 +397,94 @@ export function DataGrid<T, C = unknown>({
   );
 
   /* ---------------------------------------------------------------------- */
+  /* Grouping                                                               */
+  /* ---------------------------------------------------------------------- */
+
+  const requestedRowGroup =
+    controlledRowGroup !== undefined ? controlledRowGroup : ownRowGroup;
+  // A stale persisted id, or a column that does not allow it, means no grouping.
+  const groupColumn = useMemo(
+    () =>
+      requestedRowGroup == null
+        ? null
+        : (columnState.allColumns.find(
+            (column) => column.colId === requestedRowGroup && column.enableRowGroup
+          ) ?? null),
+    [requestedRowGroup, columnState.allColumns]
+  );
+  const rowGroupColId = groupColumn?.colId ?? null;
+
+  const rowGroupCols = useMemo<HxColumnVO[]>(
+    () =>
+      groupColumn
+        ? [
+            {
+              id: groupColumn.colId,
+              displayName: headerText(groupColumn as never),
+              field: groupColumn.field,
+            },
+          ]
+        : [],
+    [groupColumn]
+  );
+  const visibleColumns = columnState.visibleColumns;
+  const valueCols = useMemo<HxColumnVO[]>(
+    () =>
+      groupColumn
+        ? visibleColumns
+            .filter((column) => column.aggFunc)
+            .map((column) => ({
+              id: column.colId,
+              displayName: headerText(column as never),
+              field: column.field,
+              aggFunc: column.aggFunc,
+            }))
+        : [],
+    [groupColumn, visibleColumns]
+  );
+
+  /* ---------------------------------------------------------------------- */
   /* Data                                                                   */
   /* ---------------------------------------------------------------------- */
 
-  const { rows, totalRows, isLoading, error, refresh, patchRows } = useServerDataSource<T>(
-    { dataSource, pageSize, page, sortModel, filterModel, onError }
-  );
+  const {
+    rows: loadedRows,
+    totalRows,
+    isLoading,
+    isStale,
+    error,
+    refresh,
+    patchRows,
+  } = useServerDataSource<T>({
+    dataSource,
+    pageSize,
+    page,
+    sortModel,
+    filterModel,
+    rowGroupCols,
+    valueCols,
+    onError,
+  });
+
+  // Rows fetched ungrouped must never be drawn as group rows, or the reverse:
+  // until the first response for a new grouping lands, show nothing.
+  const loadedGroupRef = useRef(rowGroupColId);
+  if (!isStale) loadedGroupRef.current = rowGroupColId;
+  const rows = loadedGroupRef.current === rowGroupColId ? loadedRows : [];
+
+  const grouping = useRowGrouping<T>({
+    dataSource,
+    rows,
+    groupColumn: groupColumn as never,
+    rowGroupCols,
+    valueCols,
+    sortModel,
+    filterModel,
+    blockSize: groupChildBlockSize,
+    getGroupChildCount,
+    onError,
+  });
+  const { displayRows, leafRows } = grouping;
 
   // A page that no longer exists (filter narrowed the result set) would show an
   // empty grid forever, so walk back to the last real page.
@@ -366,7 +501,7 @@ export function DataGrid<T, C = unknown>({
     if (page > pageCount - 1) setPage(pageCount - 1);
   }, [totalRows, rows.length, pageSize, page, isLoading]);
 
-  const virtual = useVirtualRows({ rowCount: rows.length, rowHeight });
+  const virtual = useVirtualRows({ rowCount: displayRows.length, rowHeight });
 
   // Held in a ref so the ResizeObserver effect does not depend on the hook's
   // identity and re-subscribe on every render.
@@ -378,7 +513,7 @@ export function DataGrid<T, C = unknown>({
   /* ---------------------------------------------------------------------- */
 
   const selection = useSelectionModel<T>(
-    rows,
+    leafRows,
     getRowId,
     onSelectionChanged,
     isRowSelectable
@@ -387,9 +522,17 @@ export function DataGrid<T, C = unknown>({
   const noopCommit = useCallback((): RowCommitResult => ({ ok: true }), []);
   // The server's canonical copy from a successful commit replaces the row in
   // place, through the same path as api.updateRows.
+  const patchGroupRows = grouping.patchRows;
+  const patchAllRows = useCallback(
+    (updated: T[], getId: (row: T) => RowId) => {
+      patchRows(updated, getId);
+      patchGroupRows(updated, getId);
+    },
+    [patchRows, patchGroupRows]
+  );
   const onRowSaved = useCallback(
-    (row: T) => patchRows([row], latest.current.getRowId),
-    [patchRows]
+    (row: T) => patchAllRows([row], latest.current.getRowId),
+    [patchAllRows]
   );
   const editing = useEditModel<T>(onRowCommit ?? noopCommit, onRowSaved);
 
@@ -456,6 +599,23 @@ export function DataGrid<T, C = unknown>({
     [filterModel, applyFilters]
   );
 
+  const applyRowGroup = useCallback(
+    (next: string | null) => {
+      const column =
+        next == null
+          ? null
+          : latest.current.columnState.allColumns.find((c) => c.colId === next);
+      if (next != null && !column?.enableRowGroup) return;
+      if (controlledRowGroup === undefined) {
+        setOwnRowGroup(next);
+        persisted.saveRowGroup(next);
+      }
+      setPage(0);
+      onRowGroupColIdChange?.(next);
+    },
+    [controlledRowGroup, persisted, onRowGroupColIdChange]
+  );
+
   const onPageSizeChange = useCallback(
     (next: number) => {
       setPageSize(next);
@@ -472,7 +632,8 @@ export function DataGrid<T, C = unknown>({
   // Latest-value refs keep the api object stable, so passing it into memoised
   // cells never invalidates them.
   const latest = useRef({
-    rows,
+    rows: leafRows,
+    rowGroupColId,
     selection,
     columnState,
     filterModel,
@@ -483,7 +644,8 @@ export function DataGrid<T, C = unknown>({
     onError,
   });
   latest.current = {
-    rows,
+    rows: leafRows,
+    rowGroupColId,
     selection,
     columnState,
     filterModel,
@@ -494,9 +656,13 @@ export function DataGrid<T, C = unknown>({
     onError,
   };
 
+  const resetGroups = grouping.reset;
   const api = useMemo<GridApi<T>>(
     () => ({
-      refresh: (options) => refresh(options),
+      refresh: (options) => {
+        resetGroups();
+        refresh(options);
+      },
       getDisplayedRows: () => latest.current.rows,
       getSelectedRows: () => latest.current.selection.getSelectedRows(),
       getSelectedIds: () => [...latest.current.selection.selectedIds],
@@ -552,7 +718,7 @@ export function DataGrid<T, C = unknown>({
         latest.current.columnState.reset();
         persisted.clear();
       },
-      updateRows: (updated) => patchRows(updated, latest.current.getRowId),
+      updateRows: (updated) => patchAllRows(updated, latest.current.getRowId),
       startEditing: (rowId) => {
         const row = latest.current.rows.find(
           (candidate) => latest.current.getRowId(candidate) === rowId
@@ -560,8 +726,19 @@ export function DataGrid<T, C = unknown>({
         if (row) latest.current.editing.start(rowId, row);
       },
       stopEditing: () => latest.current.editing.cancel(),
+      getRowGroup: () => latest.current.rowGroupColId,
+      setRowGroup: applyRowGroup,
     }),
-    [refresh, applyFilters, applySort, patchRows, persisted, exportFileName]
+    [
+      refresh,
+      resetGroups,
+      applyFilters,
+      applySort,
+      applyRowGroup,
+      patchAllRows,
+      persisted,
+      exportFileName,
+    ]
   );
 
   useImperativeHandle(apiRef, () => api, [api]);
@@ -598,7 +775,8 @@ export function DataGrid<T, C = unknown>({
   const cellContext = context ?? emptyContext;
 
   const { startIndex, endIndex } = virtual.window;
-  const visibleRows = rows.slice(startIndex, endIndex);
+  const visibleRows = displayRows.slice(startIndex, endIndex);
+  const rowWidth = columnState.layout.totalWidth + (selectable ? SELECTION_COLUMN_WIDTH : 0);
 
   // The built-in button: the selection when there is one, else every
   // matching row. Failures go to onError rather than out of a click handler.
@@ -625,6 +803,19 @@ export function DataGrid<T, C = unknown>({
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800/60">
           {toolbar?.(api)}
+          {groupColumn && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-25 py-0.5 pl-2 pr-1 text-xs text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
+              Grouped by <strong className="font-semibold">{headerText(groupColumn as never)}</strong>
+              <button
+                type="button"
+                aria-label="Remove grouping"
+                className="rounded-full px-1 leading-none hover:bg-brand-100 dark:hover:bg-brand-500/20"
+                onClick={() => applyRowGroup(null)}
+              >
+                ×
+              </button>
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-1">
             <button
               type="button"
@@ -685,6 +876,8 @@ export function DataGrid<T, C = unknown>({
             onResize={columnState.setWidth}
             onMove={onHeaderMove}
             onPin={columnState.setPinned}
+            rowGroupColId={rowGroupColId}
+            onRowGroup={applyRowGroup}
           />
 
           {floatingFilter && (
@@ -704,11 +897,53 @@ export function DataGrid<T, C = unknown>({
             className="relative"
             style={{
               height: virtual.totalHeight,
-              width: columnState.layout.totalWidth + (selectable ? 40 : 0),
+              width: rowWidth,
             }}
           >
-            {visibleRows.map((row, offset) => {
+            {visibleRows.map((line, offset) => {
               const rowIndex = startIndex + offset;
+
+              if (line.kind === 'group') {
+                return (
+                  <GroupRow
+                    key={`hxg-group:${line.groupKey}`}
+                    row={line.row}
+                    groupKey={line.groupKey}
+                    label={groupLabel(line.row, groupColumn as never)}
+                    groupHeader={headerText(groupColumn as never)}
+                    childCount={line.childCount}
+                    expanded={line.expanded}
+                    rowIndex={rowIndex}
+                    top={rowIndex * rowHeight}
+                    height={rowHeight}
+                    layout={columnState.layout}
+                    context={cellContext}
+                    api={api}
+                    selectable={selectable}
+                    onToggle={grouping.toggleGroup}
+                  />
+                );
+              }
+
+              if (line.kind === 'status') {
+                return (
+                  <GroupStatusRow
+                    key={`hxg-status:${line.groupKey}`}
+                    groupKey={line.groupKey}
+                    status={line.status}
+                    loaded={line.loaded}
+                    total={line.total}
+                    error={line.error}
+                    rowIndex={rowIndex}
+                    top={rowIndex * rowHeight}
+                    height={rowHeight}
+                    width={rowWidth}
+                    onLoadMore={grouping.loadMore}
+                  />
+                );
+              }
+
+              const { row } = line;
               const rowId = getRowId(row);
               const isRowEditing = editing.edit?.rowId === rowId;
 
@@ -721,6 +956,7 @@ export function DataGrid<T, C = unknown>({
                     row={row}
                     rowId={rowId}
                     rowIndex={rowIndex}
+                    selectionIndex={line.leafIndex}
                     top={rowIndex * rowHeight}
                     height={rowHeight}
                     layout={columnState.layout}

@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { DocSection } from '../docs/DocSections';
 import {
+  GROUPING_DOCS,
   LAYOUT_DOCS,
   LIVE_DOCS,
   MARKET_DOCS,
@@ -10,6 +11,7 @@ import {
 } from './docs';
 import {
   IconColumns,
+  IconGroup,
   IconImage,
   IconInfinity,
   IconPalette,
@@ -22,6 +24,7 @@ import { LiveExample } from './live/LiveExample';
 import { ThemingExample } from './theming/ThemingExample';
 import { LayoutExample } from './layout/LayoutExample';
 import { OpenEndedExample } from './open-ended/OpenEndedExample';
+import { GroupingExample } from './grouping/GroupingExample';
 
 export interface Example {
   id: string;
@@ -135,6 +138,30 @@ export const EXAMPLES: Example[] = [
     sourceDir: 'src/examples/layout',
     docs: LAYOUT_DOCS,
     Component: LayoutExample,
+  },
+  {
+    id: 'grouping',
+    title: 'Row grouping',
+    blurb: 'Server-side groups, aggregates',
+    description: (
+      <>
+        Group by sector, exchange or rating from the toolbar or a column's ⋮
+        menu. The server answers with one row per group and its{' '}
+        <code className="rounded bg-gray-100 px-1 font-mono text-[11px] dark:bg-white/10">aggFunc</code>{' '}
+        totals, then each group's rows as it is opened — the same contract as
+        ag-grid's server-side row model.
+      </>
+    ),
+    icon: IconGroup,
+    tags: ['server-side', 'grouping', 'aggregates'],
+    source: [
+      'src/examples/grouping/GroupingExample.tsx',
+      'src/examples/grouping/columns.tsx',
+      'server/index.mjs',
+    ],
+    sourceDir: 'src/examples/grouping',
+    docs: GROUPING_DOCS,
+    Component: GroupingExample,
   },
   {
     id: 'open-ended',

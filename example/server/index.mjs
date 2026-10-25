@@ -175,6 +175,37 @@ function applySort(list, sortModel) {
   });
 }
 
+const AGGREGATES = {
+  sum: (values) => values.reduce((total, value) => total + value, 0),
+  min: (values) => Math.min(...values),
+  max: (values) => Math.max(...values),
+  avg: (values) => values.reduce((total, value) => total + value, 0) / values.length,
+  count: (values) => values.length,
+};
+
+/**
+ * One row per distinct value of `field`: the value itself, `childCount`, and
+ * every requested aggregate under its column's field.
+ */
+function groupRows(list, field, valueCols) {
+  const groups = new Map();
+  for (const row of list) {
+    const key = row[field];
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return [...groups].map(([key, members]) => {
+    const groupRow = { [field]: key, childCount: members.length };
+    for (const { field: valueField, aggFunc } of valueCols) {
+      const aggregate = AGGREGATES[aggFunc];
+      if (!aggregate) continue;
+      const values = members.map((member) => Number(member[valueField])).filter(Number.isFinite);
+      groupRow[valueField] = values.length ? aggregate(values) : null;
+    }
+    return groupRow;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* HTTP                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -272,7 +303,34 @@ const server = createServer(async (req, res) => {
 
     const { startRow = 0, endRow = 20, sortModel = [], filterModel = {} } = request;
 
-    const filtered = rows.filter((row) => matches(row, filterModel));
+    let filtered = rows.filter((row) => matches(row, filterModel));
+
+    // #region grouping-server
+    // Grouping uses the same server-side row model contract as ag-grid. One
+    // grouping column and no group key: answer with one row per group, its
+    // aggregates and its size. A group key: answer with that group's rows,
+    // exactly like an ungrouped page with one more filter.
+    const [group] = request.rowGroupCols ?? [];
+    const groupKeys = request.groupKeys ?? [];
+    if (group && groupKeys.length === 0) {
+      const groups = groupRows(filtered, group.field, request.valueCols ?? []);
+      // Sort groups by the group column or an aggregate; anything else falls
+      // back to the group value.
+      const usable = sortModel.filter(({ colId }) => colId in (groups[0] ?? {}));
+      const sortedGroups = applySort(
+        groups,
+        usable.length ? usable : [{ colId: group.field, sort: 'asc' }]
+      );
+      if (LATENCY_MS > 0) await new Promise((r) => setTimeout(r, LATENCY_MS));
+      return json(res, 200, {
+        rows: sortedGroups.slice(startRow, endRow),
+        lastRow: sortedGroups.length,
+      });
+    }
+    if (group) {
+      filtered = filtered.filter((row) => String(row[group.field]) === groupKeys[0]);
+    }
+    // #endregion
     const sorted = applySort(filtered, sortModel);
     const page = sorted.slice(startRow, endRow);
 

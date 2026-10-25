@@ -438,3 +438,66 @@ export const OPEN_ENDED_DOCS: DocSection[] = [
     snippet: { file: 'src/examples/open-ended/OpenEndedExample.tsx', region: 'uncounted-source' },
   },
 ];
+
+export const GROUPING_DOCS: DocSection[] = [
+  {
+    title: 'Which columns can group, and which aggregate',
+    body: (
+      <>
+        <p>
+          <C>enableRowGroup</C> puts "Group by this column" in a column's ⋮
+          menu. <C>aggFunc</C> asks the server for a <C>sum</C>, <C>avg</C>,{' '}
+          <C>min</C>, <C>max</C> or <C>count</C> of that column on every group
+          row. The grid never computes the aggregate itself: it holds one page,
+          not the whole result set, so only the server can.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/grouping/columns.tsx', region: 'groupable-columns' },
+  },
+  {
+    title: 'Aggregates render through the column',
+    body: (
+      <>
+        <p>
+          The server returns each aggregate under the column's own{' '}
+          <C>field</C>, so the group row's value goes through the same{' '}
+          <C>valueFormatter</C> or <C>cellRenderer</C> as an ordinary row. Columns
+          without an <C>aggFunc</C> stay blank on group rows.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/grouping/columns.tsx', region: 'aggregated-columns' },
+  },
+  {
+    title: 'Two requests, one data source',
+    body: (
+      <>
+        <p>
+          Nothing changes on the client: the same <C>getRows</C> receives{' '}
+          <C>rowGroupCols</C>, <C>valueCols</C> and <C>groupKeys</C>. With a
+          grouping column and no key it answers group rows, and the pager pages
+          over groups. With a key it answers that group's rows, which the grid
+          fetches a block at a time as the group is opened.
+        </p>
+      </>
+    ),
+    snippet: { file: 'server/index.mjs', region: 'grouping-server' },
+  },
+  {
+    title: 'Driving the grouping yourself',
+    body: (
+      <>
+        <p>
+          <C>defaultRowGroupColId</C> sets the first grouping. After that the
+          user's choice is persisted under <C>storageKey</C>. The toolbar
+          select reads and sets it through <C>api.getRowGroup()</C> and{' '}
+          <C>api.setRowGroup()</C>. For full control, pass <C>rowGroupColId</C>{' '}
+          with <C>onRowGroupColIdChange</C> instead. CSV export always fetches
+          rows, never group summaries.
+        </p>
+      </>
+    ),
+    snippet: { file: 'src/examples/grouping/GroupingExample.tsx', region: 'grouping-grid' },
+  },
+];

@@ -55,11 +55,14 @@
  *   server-side row model.
  * - {@link GridApi} — the imperative handle, for refreshing, exporting every
  *   matching row as CSV, and patching rows in place.
+ * - {@link ColumnDef.enableRowGroup} and {@link HxRowsRequest} — single-level
+ *   row grouping, resolved by the server like everything else.
  *
  * ## Not in this version
  *
- * Row grouping, pivoting, tree data, master/detail, variable row heights, and
- * `.xlsx` output — CSV is written with a BOM, which Excel opens natively.
+ * Multi-level grouping, pivoting, tree data, master/detail, variable row
+ * heights, and `.xlsx` output — CSV is written with a BOM, which Excel opens
+ * natively.
  *
  * @packageDocumentation
  */
@@ -94,6 +97,12 @@ export type {
   UseServerDataSourceOptions,
   UseServerDataSourceResult,
 } from './core/useServerDataSource';
+export { useRowGrouping } from './core/useRowGrouping';
+export type {
+  GroupedDisplayRow,
+  UseRowGroupingOptions,
+  UseRowGroupingResult,
+} from './core/useRowGrouping';
 export { useVirtualRows } from './core/useVirtualRows';
 export type {
   UseVirtualRowsOptions,
@@ -159,6 +168,8 @@ export type {
   SortModelItem,
   HxRowsRequest,
   HxRowsResponse,
+  HxColumnVO,
+  HxAggFunc,
   HxDataSource,
   RowCommitResult,
   PersistedGridState,

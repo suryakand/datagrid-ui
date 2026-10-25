@@ -73,7 +73,11 @@ After changing `src/`, verify with all four: root `npm test`, root `npm run type
 
 The grid holds one page at a time and never sorts or filters locally. `DataGrid` composes hooks from `src/core/`, each owning one concern: `useServerDataSource` (paging + block cache), `useColumnState` (order/width/visibility/pinning), `useSelectionModel`, `useEditModel`, `useVirtualRows`, `useGridState` (localStorage).
 
-`HxRowsRequest` / `HxFilterModel` in `src/types.ts` are **deliberately wire-compatible with ag-grid's server-side row model** — the empty `rowGroupCols`/`valueCols`/`pivotCols`/`groupKeys` fields exist only so backends written for that model do not fall over. Do not "clean them up".
+`HxRowsRequest` / `HxFilterModel` in `src/types.ts` are **deliberately wire-compatible with ag-grid's server-side row model** — the always-empty `pivotCols`/`pivotMode` fields exist only so backends written for that model do not fall over. Do not "clean them up".
+
+### Grouping
+
+Single-level and server-side, using the same SSRM contract: `rowGroupCols` + empty `groupKeys` asks for group rows (paged by the normal pager), `groupKeys: [key]` asks for one group's rows. `useServerDataSource` fetches the page (of groups, when grouped); `useRowGrouping` owns everything below a group row — open groups, per-group block fetches (abort + generation counter), "Load more" — and flattens it all into one fixed-height display list, so `useVirtualRows` is unchanged. Selection ranges over `leafRows`, which is why `GridRow` takes a separate `selectionIndex`. `useServerDataSource.isStale` stops rows fetched under one grouping being drawn as the other while the new request is in flight. Export (`fetchAllRows`) is always ungrouped.
 
 `lastRow` in the response is the total across all pages, not `rows.length`; it drives the pager.
 
@@ -87,7 +91,7 @@ Every request carries an `AbortController` and a sequence number so a slow respo
 
 1. **Column definitions must be static.** Anything volatile — in-flight ids, handlers, per-tick state — goes in the `context` prop, which reaches every `cellRenderer` without rebuilding a single definition. Putting volatile data in a column rebuilds all of them on every change.
 
-2. **Fixed row heights only.** This is what makes the visible range O(1) and removes the measure-then-reflow pass. Variable heights are out of scope, along with grouping, pivoting, tree data and master/detail.
+2. **Fixed row heights only.** This is what makes the visible range O(1) and removes the measure-then-reflow pass. Variable heights are out of scope, along with multi-level grouping, pivoting, tree data and master/detail.
 
 ### Styling
 

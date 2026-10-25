@@ -170,8 +170,48 @@ unchanged:
   rowGroupCols: [], valueCols: [], pivotCols: [], pivotMode: false, groupKeys: [] }
 ```
 
+(`rowGroupCols`, `valueCols` and `groupKeys` are filled only while the grid is
+grouped; see [Row grouping](#row-grouping).)
+
 and returns `{ rows, lastRow }`. Filter models use the same four shapes
 (`text`, `number`, `date`, `set`) that ag-grid emits.
+
+### Row grouping
+
+One level of grouping, resolved by the server like sorting and filtering. Mark
+the columns that may be grouped by, and the columns to aggregate on group rows:
+
+```tsx
+const columns: ColumnDef<Stock>[] = [
+  { field: 'symbol', header: 'Symbol' },
+  { field: 'sector', header: 'Sector', enableRowGroup: true },
+  { field: 'volume', header: 'Volume', aggFunc: 'sum' },
+];
+
+<DataGrid columns={columns} defaultRowGroupColId="sector" {...rest} />
+```
+
+The user groups from a column's ⋮ menu ("Group by this column") and ungroups
+from the "Grouped by" chip in the toolbar. You can also drive it yourself with
+`rowGroupColId` / `onRowGroupColIdChange` or `api.setRowGroup(colId | null)`.
+Uncontrolled grouping is persisted under `storageKey`.
+
+While grouped, the server answers two kinds of request, the same ones ag-grid's
+server-side row model sends:
+
+| Request | Return |
+|---|---|
+| `rowGroupCols: [{ id, field }]`, `groupKeys: []` | One row per group: the group value under `field`, each `valueCols` aggregate under its column's `field`, and `childCount`. `lastRow` is the number of groups, and the pager pages over groups. |
+| `rowGroupCols: [{ id, field }]`, `groupKeys: ['<value>']` | That group's rows, paged by `startRow`/`endRow`, with the usual sort and filters. |
+
+Opening a group fetches its rows in blocks of `groupChildBlockSize` (default
+100) and offers "Load more" when there are more. Group keys are strings: the
+group row's value through `String()`. Changing the sort, the filters or the
+grouping closes every group.
+
+Limits: one level only; group rows cannot be selected or edited; CSV export
+always fetches ungrouped rows, not group summaries; the grid never computes an
+aggregate itself.
 
 ### Performance note
 
@@ -273,5 +313,5 @@ so the published artifact is never stale.
 
 ## Not in this version
 
-Row grouping, pivoting, tree data, master/detail, variable row heights, and
-`.xlsx` output (CSV with a BOM opens natively in Excel).
+Multi-level row grouping, pivoting, tree data, master/detail, variable row
+heights, and `.xlsx` output (CSV with a BOM opens natively in Excel).

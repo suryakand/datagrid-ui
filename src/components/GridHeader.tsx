@@ -30,6 +30,10 @@ export interface GridHeaderProps<T, C> {
   /** Move `colId` to where `targetColId` sits in the full column order. */
   onMove: (colId: string, targetColId: string) => void;
   onPin: (colId: string, pinned: Pinned | undefined) => void;
+  /** The column the grid is grouped by, or `null`. */
+  rowGroupColId?: string | null;
+  /** Group by a column, or `null` to ungroup. Omit to hide the menu items. */
+  onRowGroup?: (colId: string | null) => void;
 }
 
 function SortIndicator({
@@ -56,14 +60,23 @@ function SortIndicator({
   );
 }
 
-/** The ⋮ pin menu. Nudged into view like the filter popover. */
+/**
+ * The ⋮ column menu: pinning, plus grouping for a column that allows it.
+ * Nudged into view like the filter popover.
+ */
 function ColumnMenu({
   pinned,
   onPin,
+  isGrouped,
+  onGroup,
   onClose,
 }: {
   pinned: Pinned | undefined;
   onPin: (pinned: Pinned | undefined) => void;
+  /** This column is the one grouped by. */
+  isGrouped: boolean;
+  /** Present only when the column can be grouped by. */
+  onGroup?: (group: boolean) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -72,7 +85,7 @@ function ColumnMenu({
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-gray-200 bg-white py-1 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900"
+      className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border border-gray-200 bg-white py-1 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900"
       onMouseLeave={onClose}
     >
       {(['left', 'right'] as const).map((side) => (
@@ -88,6 +101,18 @@ function ColumnMenu({
           {pinned === side ? `Unpin ${side}` : `Pin ${side}`}
         </button>
       ))}
+      {onGroup && (
+        <button
+          type="button"
+          className="block w-full border-t border-gray-100 px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-white/5"
+          onClick={() => {
+            onGroup(!isGrouped);
+            onClose();
+          }}
+        >
+          {isGrouped ? 'Ungroup' : 'Group by this column'}
+        </button>
+      )}
     </div>
   );
 }
@@ -107,6 +132,8 @@ export function GridHeader<T, C>({
   onResize,
   onMove,
   onPin,
+  rowGroupColId = null,
+  onRowGroup,
 }: GridHeaderProps<T, C>) {
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -296,6 +323,12 @@ export function GridHeader<T, C>({
               <ColumnMenu
                 pinned={pinned}
                 onPin={(side) => onPin(column.colId, side)}
+                isGrouped={rowGroupColId === column.colId}
+                onGroup={
+                  onRowGroup && column.enableRowGroup
+                    ? (group) => onRowGroup(group ? column.colId : null)
+                    : undefined
+                }
                 onClose={() => setOpenMenu(null)}
               />
             )}

@@ -48,6 +48,8 @@ export interface UseGridStateResult {
   saveFilters: (filters: FilterModelMap) => void;
   /** Persist the page size. */
   savePageSize: (pageSize: number) => void;
+  /** Persist the grouping column, or `null` for "not grouped". */
+  saveRowGroup: (colId: string | null) => void;
   /** Delete the saved state entirely. */
   clear: () => void;
   /** Whether anything was restored on mount. */
@@ -107,6 +109,11 @@ export function useGridState(storageKey: string | undefined): UseGridStateResult
     [persist]
   );
 
+  const saveRowGroup = useCallback(
+    (rowGroup: string | null) => persist({ rowGroup }),
+    [persist]
+  );
+
   const clear = useCallback(() => {
     if (!storageKey || typeof window === 'undefined') return;
     try {
@@ -123,6 +130,7 @@ export function useGridState(storageKey: string | undefined): UseGridStateResult
     saveSort,
     saveFilters,
     savePageSize,
+    saveRowGroup,
     clear,
     hasSavedState,
   };
